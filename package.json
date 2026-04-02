@@ -1,0 +1,22 @@
+{
+	"private": true,
+	"workspaces": ["packages/*", "examples/*"],
+	"devDependencies": {
+		"@socketsecurity/bun-security-scanner": "^1.1.2",
+		"prettier": "^3.8.1",
+		"prettier-plugin-sort-imports-desc": "^1.0.0"
+	},
+	"prettier": {
+		"semi": false,
+		"tabWidth": 4,
+		"useTabs": true,
+		"printWidth": 120,
+		"singleQuote": true,
+		"trailingComma": "es5",
+		"arrowParens": "avoid",
+		"bracketSpacing": true
+	},
+	"trustedDependencies": [
+		"@swc/core"
+	]
+}

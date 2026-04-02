@@ -1,0 +1,10 @@
+import { z } from 'zod/v4'
+import type { UIDataTypes, UIMessage } from 'ai'
+
+export const myMessageMetadataSchema = z.object({
+	createdAt: z.number(),
+})
+
+export type MyMessageMetadata = z.infer<typeof myMessageMetadataSchema>
+
+export type MyUIMessage = UIMessage<MyMessageMetadata, UIDataTypes>
