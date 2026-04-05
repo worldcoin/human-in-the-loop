@@ -40,7 +40,7 @@
 		}
 	},
 	"dependencies": {
-		"@worldcoin/idkit-core": "^4.1.0",
+		"@worldcoin/idkit-core": "^4.0.0",
 		"@worldcoin/idkit-server": "^1.0.0"
 	},
 	"devDependencies": {

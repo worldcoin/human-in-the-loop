@@ -28,7 +28,7 @@
 		"lucide-react": "^0.546.0",
 		"motion": "^12.23.24",
 		"nanoid": "^5.1.6",
-		"next": "16.0.10",
+		"next": "16.2.0",
 		"radix-ui": "latest",
 		"react": "19.2.3",
 		"react-dom": "19.2.3",
