@@ -1,5 +1,6 @@
 import type { UIMessageChunk } from 'ai'
 import { signRequest } from '@worldcoin/idkit-server'
+import type { IDKitResult } from '@worldcoin/idkit-core'
 import { createWebhook, getWritable, type RequestWithResponse } from 'workflow'
 
 /** Stream the webhook URL and rp_context to the client */
@@ -16,11 +17,11 @@ async function emitApprovalContext(toolCallId: string, webhookUrl: string) {
 		data: {
 			webhookUrl,
 			rpContext: {
-				rp_id: process.env.WORLD_RP_ID!,
 				nonce,
+				signature: sig,
 				created_at: createdAt,
 				expires_at: expiresAt,
-				signature: sig,
+				rp_id: process.env.WORLD_RP_ID!,
 			},
 		},
 	})
@@ -28,7 +29,7 @@ async function emitApprovalContext(toolCallId: string, webhookUrl: string) {
 }
 
 /** Verify the World ID proof and respond to the webhook */
-async function verifyAndRespond(request: RequestWithResponse, proof: unknown) {
+async function verifyAndRespond(request: RequestWithResponse, proof: IDKitResult) {
 	'use step'
 
 	const rpId = process.env.WORLD_RP_ID!
@@ -62,7 +63,7 @@ async function verifyAndRespond(request: RequestWithResponse, proof: unknown) {
 export async function requestHumanAuthorization(
 	{ summary }: { summary: string },
 	{ toolCallId }: { toolCallId: string }
-) {
+): Promise<IDKitResult> {
 	const webhook = createWebhook({ respondWith: 'manual' })
 
 	// Stream the webhook URL and rp_context to the client
@@ -70,11 +71,11 @@ export async function requestHumanAuthorization(
 
 	// Wait for the IDKit proof to be POSTed to the webhook
 	const request = await webhook
-	const proof = await request.json()
-	console.log('IDKit verification response:', proof)
+	const proof = (await request.json()) as IDKitResult
 
 	// Verify the proof and respond to the webhook (throws if verification fails)
 	await verifyAndRespond(request, proof)
+	webhook.dispose()
 
-	return 'Booking verified via World ID.'
+	return proof
 }

@@ -1,51 +1,52 @@
 {
-  "name": "@worldcoin/human-in-the-loop",
-  "type": "module",
-  "version": "0.1.0",
-  "description": "Human-in-the-loop approval workflows using World ID",
-  "license": "MIT",
-  "exports": {
-    ".": {
-      "types": {
-        "import": "./dist/index.d.ts"
-      },
-      "import": "./dist/index.js"
-    },
-    "./workflows": {
-      "types": {
-        "import": "./dist/workflows/index.d.ts"
-      },
-      "import": "./dist/workflows/index.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "bun --bun tsup",
-    "dev": "bun --bun tsup --watch",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build"
-  },
-  "peerDependencies": {
-    "ai": ">=5.0.0",
-    "workflow": ">=4.2.0-beta.64"
-  },
-  "peerDependenciesMeta": {
-    "workflow": {
-      "optional": true
-    }
-  },
-  "dependencies": {
-    "@worldcoin/idkit-server": "^1.0.0"
-  },
-  "devDependencies": {
-    "ai": "^5.0.76",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "workflow": "^4.2.0-beta.70"
-  }
+	"name": "@worldcoin/human-in-the-loop",
+	"type": "module",
+	"version": "0.1.0",
+	"description": "Human-in-the-loop approval workflows using World ID",
+	"license": "MIT",
+	"exports": {
+		".": {
+			"types": {
+				"import": "./dist/index.d.ts"
+			},
+			"import": "./dist/index.js"
+		},
+		"./workflows": {
+			"types": {
+				"import": "./dist/workflows/index.d.ts"
+			},
+			"import": "./dist/workflows/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "bun --bun tsup",
+		"dev": "bun --bun tsup --watch",
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "bun run build"
+	},
+	"peerDependencies": {
+		"ai": ">=5.0.0",
+		"workflow": ">=4.2.0-beta.76"
+	},
+	"peerDependenciesMeta": {
+		"workflow": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"@worldcoin/idkit-core": "^4.1.0",
+		"@worldcoin/idkit-server": "^1.0.0"
+	},
+	"devDependencies": {
+		"ai": "^5.0.76",
+		"tsup": "^8.5.0",
+		"typescript": "^5.8.3",
+		"workflow": "^4.2.0-beta.70"
+	}
 }

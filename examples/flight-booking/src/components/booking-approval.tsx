@@ -43,14 +43,14 @@ export function BookingApproval({ webhookUrl, rpContext, input, output }: Bookin
 			{rpContext && webhookUrl && (
 				<IDKitRequestWidget
 					open={open}
-                    onSuccess={() => {}}
+					onSuccess={() => {}}
 					onOpenChange={setOpen}
-					app_id={process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`}
-					action="approve-booking"
 					rp_context={rpContext}
+					action="approve-booking"
 					allow_legacy_proofs={false}
 					preset={selfieCheckLegacy()}
-                    action_description={input.summary}
+					action_description={input.summary}
+					app_id={process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`}
 					handleVerify={async result => {
 						const response = await fetch(webhookUrl, {
 							method: 'POST',
