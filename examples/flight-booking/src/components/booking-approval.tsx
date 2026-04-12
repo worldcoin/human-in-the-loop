@@ -1,14 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { IDKitRequestWidget, selfieCheckLegacy, type RpContext } from '@worldcoin/idkit'
+import { IDKitRequestWidget, orbLegacy, selfieCheckLegacy, type RpContext } from '@worldcoin/idkit'
+import type { IDKitResult } from '@worldcoin/idkit-core'
 
 interface BookingApprovalProps {
 	toolCallId: string
 	webhookUrl?: string
 	rpContext?: RpContext
 	input?: { summary: string }
-	output?: string
+	output?: IDKitResult
 }
 
 export function BookingApproval({ webhookUrl, rpContext, input, output }: BookingApprovalProps) {
@@ -17,7 +18,7 @@ export function BookingApproval({ webhookUrl, rpContext, input, output }: Bookin
 	if (output) {
 		return (
 			<div className="rounded-lg border p-4">
-				<p className="text-sm text-muted-foreground">{output}</p>
+				<p className="text-sm text-muted-foreground">Booking approved with World ID.</p>
 			</div>
 		)
 	}
