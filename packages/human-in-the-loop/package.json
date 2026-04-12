@@ -1,7 +1,7 @@
 {
 	"name": "@worldcoin/human-in-the-loop",
 	"type": "module",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Human-in-the-loop approval workflows using World ID",
 	"license": "MIT",
 	"exports": {
