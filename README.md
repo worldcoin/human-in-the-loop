@@ -1,6 +1,6 @@
 # Human in the loop 
 
-[![Demo](https://img.youtube.com/vi/FNL49WujoyE/maxresdefault.jpg)](https://www.youtube.com/watch?v=FNL49WujoyE)
+https://github.com/user-attachments/assets/c01e5f5c-aa16-4307-994f-850a7701eea0
 
 Human-in-the-loop approval workflows for AI agents, gated by [World ID](https://world.org) proof-of-personhood.
 
