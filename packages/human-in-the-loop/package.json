@@ -4,6 +4,15 @@
 	"version": "0.1.2",
 	"description": "Human-in-the-loop approval workflows using World ID",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/worldcoin/human-in-the-loop.git",
+		"directory": "packages/human-in-the-loop"
+	},
+	"homepage": "https://github.com/worldcoin/human-in-the-loop#readme",
+	"bugs": {
+		"url": "https://github.com/worldcoin/human-in-the-loop/issues"
+	},
 	"exports": {
 		".": {
 			"types": {
