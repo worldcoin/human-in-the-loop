@@ -7,7 +7,7 @@ import { createWebhook, getWritable, type RequestWithResponse } from 'workflow'
 async function emitApprovalContext(toolCallId: string, webhookUrl: string) {
 	'use step'
 
-	const { sig, nonce, createdAt, expiresAt } = signRequest('approve-booking', process.env.WORLD_SIGNING_KEY!)
+	const { sig, nonce, createdAt, expiresAt } = signRequest({ signingKeyHex: process.env.WORLD_SIGNING_KEY!, action: 'approve-booking' })
 
 	const writable = getWritable<UIMessageChunk>()
 	const writer = writable.getWriter()
