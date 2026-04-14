@@ -2,7 +2,7 @@
 	"private": true,
 	"workspaces": ["packages/*", "examples/*"],
 	"scripts": {
-		"release": "bun run --filter '*' build && changeset publish"
+		"release": "bun run --filter './packages/*' build && changeset publish"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.29.4",
