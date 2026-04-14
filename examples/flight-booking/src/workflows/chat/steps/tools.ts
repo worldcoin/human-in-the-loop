@@ -258,7 +258,7 @@ export const flightBookingTools = {
 					'A human-readable summary of the flight to book, including flight number, route, date, passenger name, price, and seat preference'
 				),
 		}),
-		execute: requestHumanAuthorization,
+		execute: requestHumanAuthorization(),
 	},
 	searchFlights: {
 		description: 'Search for available flights between two cities on a specific date',

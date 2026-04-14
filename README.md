@@ -45,15 +45,63 @@ export const tools = {
   approveAction: {
     description: 'Request human approval via World ID before a sensitive action.',
     inputSchema: z.object({ summary: z.string() }),
-    execute: requestHumanAuthorization,
+    execute: requestHumanAuthorization(),
   },
   // your other tools (each with 'use step' in their execute function)
 }
 ```
 
+**About the action.** Every World ID verification is bound to an `action` string. It does **not** need to be registered anywhere (no World developer portal setup), but it **must be unique per verification** — that's how the resulting proof gets cryptographically tied to this specific approval rather than some other one. By default the package uses the `toolCallId`, which is already unique per call.
+
+You can override with any value of your choosing — either a plain string (you take responsibility for uniqueness) or a function that derives one from the per-call context:
+
+```ts
+// Plain string — fine when you've already produced something unique upstream
+execute: requestHumanAuthorization({ action: myUniqueOperationId })
+
+// Function — derive from the call context (workflow run ID, input hash, resource id, ...)
+execute: requestHumanAuthorization({
+  action: ({ toolCallId, input }) => `booking:${toolCallId}`,
+})
+```
+
+`signingKey` and `rpId` are read from `WORLD_SIGNING_KEY` and `WORLD_RP_ID` env vars by default. You can pass them explicitly if you need to source them from somewhere else (e.g. a request-scoped binding on Cloudflare Workers):
+
+```ts
+execute: requestHumanAuthorization({
+  signingKey: c.env.WORLD_SIGNING_KEY,
+  rpId: c.env.WORLD_RP_ID,
+})
+```
+
 ### 3. Handle on the client
 
-On the client, listen for the `data-approval-context` stream chunk to get `{ webhookUrl, rpContext }`, render an `IDKitRequestWidget` with them, and POST the resulting proof to `webhookUrl`. See `examples/flight-booking/src/components/booking-approval.tsx` for a full working example.
+Install the React bindings and drop the `<HumanApproval>` component into your message renderer. It finds the streamed approval context for the tool call, renders the IDKit widget, and POSTs the proof back to the webhook for you. `app_id` comes from `NEXT_PUBLIC_WORLD_APP_ID` by default.
+
+```bash
+bun add @worldcoin/human-in-the-loop-react
+```
+
+```tsx
+import { HumanApproval } from '@worldcoin/human-in-the-loop-react'
+
+{message.parts.map(part => {
+  if (part.type === 'tool-approveAction' && 'toolCallId' in part) {
+    return <HumanApproval key={part.toolCallId} message={message} part={part} />
+  }
+  // ...your other part renderers
+})}
+```
+
+Need custom UI? Use the `useHumanApproval` hook directly and render your own button + `IDKitRequestWidget`:
+
+```tsx
+import { useHumanApproval } from '@worldcoin/human-in-the-loop-react'
+
+const { ready, action, rpContext, verify, status } = useHumanApproval(message, part)
+```
+
+See `examples/flight-booking/src/app/page.tsx` for a working example.
 
 ## Prerequisites
 
@@ -115,7 +163,7 @@ Where these come from:
 | `OPENAI_API_TOKEN` | `src/workflows/chat/index.ts` | LLM provider for the `DurableAgent` |
 | `WORLD_RP_ID` | `packages/human-in-the-loop/src/workflows/human-approval.ts` | Relying-party ID passed to World ID verify endpoint |
 | `WORLD_SIGNING_KEY` | same | Signs the approval request (`signRequest`) |
-| `NEXT_PUBLIC_WORLD_APP_ID` | `src/components/booking-approval.tsx` | `app_id` for `IDKitRequestWidget` |
+| `NEXT_PUBLIC_WORLD_APP_ID` | `<HumanApproval>` from `@worldcoin/human-in-the-loop-react` | `app_id` for `IDKitRequestWidget` |
 
 ### 2. Start the dev server
 
@@ -139,8 +187,8 @@ The demo walks through the full end-to-end flow:
 2. `POST /api/chat` starts a durable workflow via `start(chatWorkflow, ...)` (`src/app/api/chat/route.ts`).
 3. `chatWorkflow` runs a `DurableAgent` with the flight tools (`src/workflows/chat/index.ts`).
 4. Before any booking, the agent is required (by system prompt) to call the `bookingApproval` tool, which is wired to `requestHumanAuthorization` from `@worldcoin/human-in-the-loop/workflows` (`src/workflows/chat/steps/tools.ts`).
-5. `requestHumanAuthorization` creates a Workflow webhook, streams the webhook URL + signed `rp_context` to the client as a `data-approval-context` chunk, and awaits the POST.
-6. The client's `BookingApproval` component renders the summary and opens `IDKitRequestWidget`. When the user completes the World ID flow, the proof is POSTed to the webhook URL.
+5. `requestHumanAuthorization` creates a Workflow webhook, streams `{ webhookUrl, action, rpContext }` to the client as a `data-approval-context` chunk, and awaits the POST.
+6. The client's `<HumanApproval>` component (from `@worldcoin/human-in-the-loop-react`) reads the streamed context and opens `IDKitRequestWidget`. When the user completes the World ID flow, the proof is POSTed to the webhook URL.
 7. The workflow resumes, calls `https://developer.world.org/api/v4/verify/{rp_id}` to verify the proof, responds to the webhook, disposes it, and returns the proof to the agent — which then proceeds to `bookFlight`.
 
 ## License

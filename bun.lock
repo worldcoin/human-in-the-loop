@@ -12,7 +12,7 @@
     },
     "examples/flight-booking": {
       "name": "flight-booking-example",
-      "version": "0.0.1",
+      "version": "0.0.2",
       "dependencies": {
         "@ai-sdk/openai": "2.0",
         "@ai-sdk/react": "2.0.60",
@@ -21,6 +21,7 @@
         "@vercel/otel": "^1.13.0",
         "@workflow/ai": "^4.0.1-beta.56",
         "@worldcoin/human-in-the-loop": "workspace:*",
+        "@worldcoin/human-in-the-loop-react": "workspace:*",
         "@worldcoin/idkit": "^4.0.9",
         "@xyflow/react": "^12.9.0",
         "ai": "^5.0.76",
@@ -58,7 +59,7 @@
     },
     "packages/human-in-the-loop": {
       "name": "@worldcoin/human-in-the-loop",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@worldcoin/idkit-core": "^4.1.1",
         "@worldcoin/idkit-server": "^1.1.1",
@@ -76,6 +77,23 @@
       "optionalPeers": [
         "workflow",
       ],
+    },
+    "packages/human-in-the-loop-react": {
+      "name": "@worldcoin/human-in-the-loop-react",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/react": "^19.2.7",
+        "@worldcoin/idkit": "^4.0.9",
+        "ai": "^5.0.76",
+        "react": "^19.2.3",
+        "tsup": "^8.5.0",
+        "typescript": "^5.8.3",
+      },
+      "peerDependencies": {
+        "@worldcoin/idkit": ">=4.0.0",
+        "ai": ">=5.0.0",
+        "react": ">=18.0.0",
+      },
     },
   },
   "trustedDependencies": [
@@ -972,6 +990,8 @@
     "@workflow/world-vercel": ["@workflow/world-vercel@4.1.0-beta.43", "", { "dependencies": { "@vercel/oidc": "3.2.0", "@vercel/queue": "0.1.1", "@workflow/errors": "4.1.0-beta.18", "@workflow/world": "4.1.0-beta.12", "cbor-x": "1.6.0", "undici": "7.22.0", "zod": "4.3.6" }, "peerDependencies": { "@opentelemetry/api": "1" }, "optionalPeers": ["@opentelemetry/api"] }, "sha512-noO4XgVf2edOlPFdCX20YGKq4lCQ+KkTX+wJZGf2BR6xsNu+0VVgmc+K62Pmy0WzHK1e69vxoXWo0gJO8T3wKQ=="],
 
     "@worldcoin/human-in-the-loop": ["@worldcoin/human-in-the-loop@workspace:packages/human-in-the-loop"],
+
+    "@worldcoin/human-in-the-loop-react": ["@worldcoin/human-in-the-loop-react@workspace:packages/human-in-the-loop-react"],
 
     "@worldcoin/idkit": ["@worldcoin/idkit@4.0.9", "", { "dependencies": { "@worldcoin/idkit-core": "4.0.13", "qrcode": "^1.5.4" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-NVDEj5ax82mxW2+vzV76o3i9OnX6ItoNzg2sjvaP+WHIyfdAVDkIMlVTZ/Baz2PNHEuR99sEYNrVq+vclHzYdw=="],
 
