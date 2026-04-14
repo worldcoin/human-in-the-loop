@@ -57,14 +57,26 @@ export function useHumanApproval(
 
 	const toolCallId = isToolUIPart(part) ? part.toolCallId : undefined
 
-	// Approval contexts are write-once per tool call. Cache the first hit so we
-	// don't re-scan `message.parts` on every streaming chunk.
-	const cacheRef = useRef<HumanApprovalContext | undefined>(undefined)
+	// Reset verification state if this hook instance is reused across different
+	// tool calls (e.g. a list keyed by index instead of toolCallId). Calling
+	// setState during render is the documented React pattern for resetting
+	// state when a prop changes; the ref comparison prevents infinite loops.
+	const prevToolCallIdRef = useRef(toolCallId)
+	if (prevToolCallIdRef.current !== toolCallId) {
+		prevToolCallIdRef.current = toolCallId
+		setState({ status: 'idle' })
+	}
+
+	// Cache the approval context per toolCallId. Contexts are write-once, so
+	// caching avoids re-scanning `message.parts` on every streaming chunk; the
+	// key prevents a reused hook instance from leaking stale context across
+	// different tool calls.
+	const cacheRef = useRef<{ toolCallId: string; context: HumanApprovalContext } | undefined>(undefined)
 	const context = useMemo(() => {
-		if (cacheRef.current) return cacheRef.current
 		if (!toolCallId) return undefined
+		if (cacheRef.current?.toolCallId === toolCallId) return cacheRef.current.context
 		const found = findApprovalContext(message.parts, toolCallId)
-		if (found) cacheRef.current = found
+		cacheRef.current = found ? { toolCallId, context: found } : undefined
 		return found
 	}, [message.parts, toolCallId])
 
