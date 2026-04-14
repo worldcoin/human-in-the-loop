@@ -3,8 +3,7 @@
 import { useChat } from '@ai-sdk/react'
 import { useEffect, useRef } from 'react'
 import ChatInput from '@/components/chat-input'
-import type { RpContext } from '@worldcoin/idkit'
-import { BookingApproval } from '@/components/booking-approval'
+import { HumanApproval } from '@worldcoin/human-in-the-loop-react'
 import type { MyUIMessage } from '@/schemas/chat'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Response } from '@/components/ai-elements/response'
@@ -118,7 +117,6 @@ export default function ChatPage() {
 								<Message from={message.role}>
 									<MessageContent>
 										{message.parts.map((part, partIndex) => {
-											// Render text parts
 											if (part.type === 'text') {
 												return (
 													<Response key={`${message.id}-text-${partIndex}`}>
@@ -127,37 +125,16 @@ export default function ChatPage() {
 												)
 											}
 
-											// Render booking approval tool
-											if (part.type === 'tool-bookingApproval') {
-												if (!('toolCallId' in part)) return null
-												// Find the streamed approval context for this tool call
-												const contextPart = message.parts.find(
-													p =>
-														p.type === 'data-approval-context' &&
-														'id' in p &&
-														p.id === part.toolCallId
-												)
-												const context =
-													contextPart && 'data' in contextPart
-														? (contextPart.data as {
-																webhookUrl: string
-																rpContext: RpContext
-															})
-														: undefined
+											if (part.type === 'tool-bookingApproval' && 'toolCallId' in part) {
 												return (
-													<BookingApproval
+													<HumanApproval
 														key={part.toolCallId}
-														toolCallId={part.toolCallId}
-														webhookUrl={context?.webhookUrl}
-														rpContext={context?.rpContext}
-														input={part.input as any}
-														output={part.output as any}
+														message={message}
+														part={part}
 													/>
 												)
 											}
 
-											// Render tool parts
-											// Type guard to check if this is a tool invocation part
 											if (
 												part.type === 'tool-searchFlights' ||
 												part.type === 'tool-checkFlightStatus' ||
@@ -165,7 +142,6 @@ export default function ChatPage() {
 												part.type === 'tool-bookFlight' ||
 												part.type === 'tool-checkBaggageAllowance'
 											) {
-												// Additional type guard to ensure we have the required properties
 												if (!('toolCallId' in part) || !('state' in part)) {
 													return null
 												}

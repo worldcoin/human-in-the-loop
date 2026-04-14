@@ -1,0 +1,52 @@
+{
+	"name": "@worldcoin/human-in-the-loop-react",
+	"type": "module",
+	"version": "0.1.0",
+	"description": "React bindings for @worldcoin/human-in-the-loop",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/worldcoin/human-in-the-loop.git",
+		"directory": "packages/human-in-the-loop-react"
+	},
+	"homepage": "https://github.com/worldcoin/human-in-the-loop#readme",
+	"bugs": {
+		"url": "https://github.com/worldcoin/human-in-the-loop/issues"
+	},
+	"exports": {
+		".": {
+			"types": {
+				"import": "./dist/index.d.ts"
+			},
+			"import": "./dist/index.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bun --bun tsup",
+		"dev": "bun --bun tsup --watch",
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "bun run build"
+	},
+	"peerDependencies": {
+		"@worldcoin/idkit": ">=4.0.0",
+		"ai": ">=5.0.0",
+		"react": ">=18.0.0"
+	},
+	"devDependencies": {
+		"@types/react": "^19.2.7",
+		"@worldcoin/idkit": "^4.0.9",
+		"ai": "^5.0.76",
+		"react": "^19.2.3",
+		"tsup": "^8.5.0",
+		"typescript": "^5.8.3"
+	}
+}
