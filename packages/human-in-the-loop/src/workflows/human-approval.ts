@@ -1,27 +1,21 @@
-import type { UIMessageChunk } from 'ai'
+import type { ToolCallOptions, UIMessageChunk } from 'ai'
 import { signRequest } from '@worldcoin/idkit-server'
 import type { IDKitResult, RpContext } from '@worldcoin/idkit-core'
 import { createWebhook, getWritable, type RequestWithResponse } from 'workflow'
 
-export interface ActionContext {
-	/** The unique tool-call identifier for this verification. */
-	toolCallId: string
-	/** The tool input (the human-readable summary the LLM produced for the user). */
-	input: { summary: string }
+export interface ActionContext<TInput = unknown> extends ToolCallOptions {
+	/** The tool input — typed via the generic on `requestHumanAuthorization<TInput>()`. */
+	input: TInput
 }
 
-export interface RequestHumanAuthorizationOptions {
+export interface RequestHumanAuthorizationOptions<TInput = unknown> {
 	/**
-	 * The action string the World ID proof will be bound to. The action **must
-	 * be unique per verification** — it's how this proof gets cryptographically
-	 * tied to this specific approval. It does NOT need to be registered anywhere
-	 * (no World developer portal setup required); it just has to be unique.
-	 *
-	 * Accepts either a plain string (use as-is — caller is responsible for
-	 * uniqueness) or a function that derives one from the per-call context.
-	 * Defaults to `toolCallId`, which is already unique per call.
+	 * Action string the World ID proof is bound to. Must be unique per verification
+	 * (no developer-portal registration needed). Pass a string for static actions, or
+	 * a function for content-bound ones (e.g. derived from input fields to prevent
+	 * replay across calls). Defaults to `toolCallId`.
 	 */
-	action?: string | ((context: ActionContext) => string)
+	action?: string | ((context: ActionContext<TInput>) => string)
 	/** Hex-encoded RP signing key. Defaults to `process.env.WORLD_SIGNING_KEY`. */
 	signingKey?: string
 	/** Relying-party ID. Defaults to `process.env.WORLD_RP_ID`. */
@@ -114,7 +108,9 @@ async function verifyAndRespond({ request, proof, rpId }: VerifyAndRespondArgs) 
  * own. `signingKey` and `rpId` fall back to `WORLD_SIGNING_KEY` / `WORLD_RP_ID`
  * env vars if omitted.
  */
-export function requestHumanAuthorization(options: RequestHumanAuthorizationOptions = {}) {
+export function requestHumanAuthorization<TInput = unknown>(
+	options: RequestHumanAuthorizationOptions<TInput> = {}
+) {
 	const { action, signingKey, rpId } = options
 
 	const resolvedSigningKey = signingKey ?? process.env.WORLD_SIGNING_KEY
@@ -131,12 +127,10 @@ export function requestHumanAuthorization(options: RequestHumanAuthorizationOpti
 		)
 	}
 
-	return async function execute(
-		input: { summary: string },
-		{ toolCallId }: { toolCallId: string }
-	): Promise<IDKitResult> {
+	return async function execute(input: TInput, options: ToolCallOptions): Promise<IDKitResult> {
+		const { toolCallId } = options
 		const resolvedAction =
-			typeof action === 'function' ? action({ toolCallId, input }) : (action ?? toolCallId)
+			typeof action === 'function' ? action({ ...options, input }) : (action ?? toolCallId)
 
 		const webhook = createWebhook({ respondWith: 'manual' })
 
