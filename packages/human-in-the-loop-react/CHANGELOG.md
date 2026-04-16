@@ -1,5 +1,11 @@
 # @worldcoin/human-in-the-loop-react
 
+## 0.1.1
+
+### Patch Changes
+
+- 5ec8825: Rename "Workflow DevKit" to "Workflow SDK" across all documentation
+
 ## 0.1.0
 
 ### Minor Changes
