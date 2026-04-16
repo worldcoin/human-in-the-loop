@@ -105,5 +105,5 @@ This project uses the following stack:
 
 - [Next.js](https://nextjs.org) 15 (App Router)
 - [Vercel AI SDK](https://ai-sdk.dev/docs) with `streamText` and tools
-- [Workflow DevKit](https://useworkflow.dev) for durability
+- [Workflow SDK](https://useworkflow.dev) for durability
 - [Tailwind CSS](https://tailwindcss.com) for styling
