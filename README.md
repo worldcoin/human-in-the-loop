@@ -4,7 +4,7 @@ https://github.com/user-attachments/assets/c01e5f5c-aa16-4307-994f-850a7701eea0
 
 Human-in-the-loop approval workflows for AI agents, gated by [World ID](https://world.org) proof-of-personhood.
 
-Built on top of the [Workflow DevKit](https://useworkflow.dev) and the [Vercel AI SDK](https://ai-sdk.dev), this package lets an AI agent pause mid-execution and wait for a real, verified human to approve an action before continuing.
+Built on top of the [Workflow SDK](https://useworkflow.dev) and the [Vercel AI SDK](https://ai-sdk.dev), this package lets an AI agent pause mid-execution and wait for a real, verified human to approve an action before continuing.
 
 ## Adding the package to your own app
 

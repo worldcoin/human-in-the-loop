@@ -2,7 +2,7 @@
 
 React bindings for [`@worldcoin/human-in-the-loop`](https://www.npmjs.com/package/@worldcoin/human-in-the-loop). Renders the World ID approval flow on the client when an AI agent pauses for human authorization.
 
-This package only handles the client side. You also need `@worldcoin/human-in-the-loop` on your server, wired into a Workflow DevKit / AI SDK tool — see the [main repo README](https://github.com/worldcoin/human-in-the-loop#readme) for the server setup.
+This package only handles the client side. You also need `@worldcoin/human-in-the-loop` on your server, wired into a Workflow SDK / AI SDK tool — see the [main repo README](https://github.com/worldcoin/human-in-the-loop#readme) for the server setup.
 
 ## Install
 
