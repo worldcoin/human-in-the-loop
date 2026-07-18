@@ -74,6 +74,14 @@ execute: requestHumanAuthorization({
 })
 ```
 
+Approvals wait indefinitely by default. Set `timeoutMs` to use a durable workflow timer and stop waiting after a fixed interval:
+
+```ts
+execute: requestHumanAuthorization({ timeoutMs: 10 * 60 * 1000 })
+```
+
+The approval webhook is disposed whether approval succeeds, times out, or fails verification.
+
 ### 3. Handle on the client
 
 Install the React bindings and drop the `<HumanApproval>` component into your message renderer. It finds the streamed approval context for the tool call, renders the IDKit widget, and POSTs the proof back to the webhook for you. `app_id` comes from `NEXT_PUBLIC_WORLD_APP_ID` by default.
@@ -189,7 +197,7 @@ The demo walks through the full end-to-end flow:
 4. Before any booking, the agent is required (by system prompt) to call the `bookingApproval` tool, which is wired to `requestHumanAuthorization` from `@worldcoin/human-in-the-loop/workflows` (`src/workflows/chat/steps/tools.ts`).
 5. `requestHumanAuthorization` creates a Workflow webhook, streams `{ webhookUrl, action, rpContext }` to the client as a `data-approval-context` chunk, and awaits the POST.
 6. The client's `<HumanApproval>` component (from `@worldcoin/human-in-the-loop-react`) reads the streamed context and opens `IDKitRequestWidget`. When the user completes the World ID flow, the proof is POSTed to the webhook URL.
-7. The workflow resumes, calls `https://developer.world.org/api/v4/verify/{rp_id}` to verify the proof, responds to the webhook, disposes it, and returns the proof to the agent — which then proceeds to `bookFlight`.
+7. The workflow resumes, calls `https://developer.world.org/api/v4/verify/{rp_id}` to verify the proof, responds to the webhook, and returns the proof to the agent — which then proceeds to `bookFlight`. The webhook is disposed on every completion or failure path.
 
 ## License
 
