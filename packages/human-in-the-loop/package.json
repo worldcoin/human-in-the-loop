@@ -36,6 +36,7 @@
 	"scripts": {
 		"build": "bun --bun tsup",
 		"dev": "bun --bun tsup --watch",
+		"test": "bun test ./tests",
 		"typecheck": "tsc --noEmit",
 		"prepublishOnly": "bun run build"
 	},
