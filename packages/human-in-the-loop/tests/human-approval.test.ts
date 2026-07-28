@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import type { IDKitResult } from '@worldcoin/idkit-core'
-import type { RequestWithResponse } from 'workflow'
+import { FatalError, type RequestWithResponse } from 'workflow'
 import {
 	readProofAndRespond,
 	verifyAndRespond,
@@ -99,9 +99,10 @@ describe('verifyAndRespond', () => {
 			throw new Error('connection refused')
 		}) as typeof fetch
 
-		await expect(verifyAndRespond({ request, proof, rpId: 'rp_test' })).rejects.toThrow(
-			'World ID verification request failed: connection refused'
-		)
+		const verification = verifyAndRespond({ request, proof, rpId: 'rp_test' })
+
+		await expect(verification).rejects.toBeInstanceOf(FatalError)
+		await expect(verification).rejects.toThrow('World ID verification request failed: connection refused')
 		expect(responses).toHaveLength(1)
 		expect(responses[0]?.status).toBe(502)
 		expect(await responses[0]?.json()).toEqual({ error: 'Verification unavailable' })

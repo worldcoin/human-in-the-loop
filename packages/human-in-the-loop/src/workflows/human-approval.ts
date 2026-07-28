@@ -1,7 +1,7 @@
 import type { ToolCallOptions, UIMessageChunk } from 'ai'
 import { signRequest } from '@worldcoin/idkit-server'
 import type { IDKitResult, RpContext } from '@worldcoin/idkit-core'
-import { createWebhook, getWritable, sleep, type RequestWithResponse } from 'workflow'
+import { createWebhook, FatalError, getWritable, sleep, type RequestWithResponse } from 'workflow'
 
 export interface ActionContext<TInput = unknown> extends ToolCallOptions {
 	/** The tool input — typed via the generic on `requestHumanAuthorization<TInput>()`. */
@@ -96,7 +96,9 @@ export async function verifyAndRespond({ request, proof, rpId }: VerifyAndRespon
 		)
 
 		const message = error instanceof Error ? error.message : 'Unknown error'
-		throw new Error(`World ID verification request failed: ${message}`)
+		// The webhook response is irreversible. Mark the step failure as fatal so the
+		// workflow runtime cannot retry and attempt to answer the same request again.
+		throw new FatalError(`World ID verification request failed: ${message}`)
 	}
 
 	if (!verifyResponse.ok) {
