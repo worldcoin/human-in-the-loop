@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { requestHumanAuthorization } from '@worldcoin/human-in-the-loop/workflows'
+import {
+	requestHumanAuthorization,
+	verifyHumanAuthorization,
+	type HumanApprovalResult,
+} from '@worldcoin/human-in-the-loop/workflows'
 
 export const mockAirports: Record<string, { name: string; city: string; timezone: string }> = {
 	SFO: {
@@ -80,6 +84,8 @@ export async function searchFlights({ from, to, date }: { from: string; to: stri
 		const flightNumber = `${airlineCode}${Math.floor(Math.random() * 900) + 100}`
 
 		return {
+			quoteId: crypto.randomUUID(),
+			currency: 'USD',
 			flightNumber,
 			from: fromCode,
 			to: toCode,
@@ -182,100 +188,46 @@ export async function getAirportInfo({ airportCode }: { airportCode: string }) {
 }
 
 const bookingParamsSchema = z.object({
+	quoteId: z.string().describe('Quote ID returned by searchFlights'),
 	flightNumber: z.string().describe('Flight number to book'),
+	departure: z.string().describe('Departure timestamp returned by searchFlights'),
+	price: z.number().positive().describe('Price returned by searchFlights'),
+	currency: z.literal('USD'),
 	passengerName: z.string().describe('Full name of the passenger'),
 	seatPreference: z.string().optional().describe('Seat preference: window, aisle, or middle'),
 })
 
 type BookingParams = z.infer<typeof bookingParamsSchema>
 
-/**
- * Derive the World ID action string for a specific booking. The action binds the
- * approval proof to these exact booking details — `bookFlight` re-derives it from
- * its own inputs and rejects any proof whose action doesn't match, making
- * "approve booking A then book flight B" structurally impossible.
- */
-function deriveBookingAction({ flightNumber, passengerName, seatPreference }: BookingParams): string {
+/** Bind approval to all booking fields, including the selected quote. */
+function deriveBookingAction(input: BookingParams): string {
 	return `book-flight:${JSON.stringify([
-		flightNumber,
-		passengerName.trim().toLowerCase(),
-		(seatPreference ?? 'any').trim().toLowerCase(),
+		input.quoteId,
+		input.flightNumber,
+		input.departure,
+		input.price,
+		input.currency,
+		input.passengerName,
+		input.seatPreference ?? null,
 	])}`
 }
 
-/**
- * Book a flight (mock). Requires the full IDKitResult from `bookingApproval`
- * passed as `approval`. Performs two security checks before booking:
- *   1. The proof's `action` matches the action derived from these exact
- *      booking parameters (binds the approval to this specific booking).
- *   2. The proof re-verifies against the World ID API (proves the proof is
- *      a real World ID artifact that the LLM couldn't have fabricated).
- *
- * Together, (1) and (2) make it impossible for the agent to book a flight
- * without a real human approval bound to the exact booking details.
- */
-export async function bookFlight({
-	flightNumber,
-	passengerName,
-	seatPreference,
-	approval,
-}: BookingParams & { approval: { action?: unknown } & Record<string, unknown> }) {
+/** Verify the package receipt before the mock booking operation. */
+export async function bookFlight({ approval, ...booking }: BookingParams & { approval: HumanApprovalResult }) {
 	'use step'
 
-	const expectedAction = deriveBookingAction({ flightNumber, passengerName, seatPreference })
-
-	if (approval.action !== expectedAction) {
-		throw new Error(
-			`bookFlight requires an approval bound to these exact booking details. ` +
-				`Call bookingApproval first with the same flightNumber, passengerName, and seatPreference, ` +
-				`then pass the IDKitResult it returned as 'approval'. ` +
-				`(expected action: ${expectedAction}, got: ${String(approval.action)})`
-		)
-	}
-
-	const rpId = process.env.WORLD_RP_ID
-	if (!rpId) {
-		throw new Error('bookFlight: WORLD_RP_ID env var is required to verify approval proofs')
-	}
-
-	const verifyResponse = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(approval),
-	})
-
-	if (!verifyResponse.ok) {
-		const error = await verifyResponse.text()
-		throw new Error(
-			`bookFlight: approval proof failed World ID verification (${verifyResponse.status}): ${error}`
-		)
-	}
-
-	console.log(`Booking flight ${flightNumber} for ${passengerName}`)
-
-	// Simulate processing
-	await new Promise(resolve => setTimeout(resolve, 1000))
-
-	// 5% chance of seat unavailable
-	if (Math.random() < 0.05) {
-		throw new Error('Selected seat preference not available. Please try a different preference.')
-	}
-
-	const confirmationNumber = `BK${Math.random().toString(36).substring(2, 8).toUpperCase()}`
-	const seatNumber =
-		seatPreference === 'window'
-			? `${Math.floor(Math.random() * 30) + 1}A`
-			: seatPreference === 'aisle'
-				? `${Math.floor(Math.random() * 30) + 1}C`
-				: `${Math.floor(Math.random() * 30) + 1}B`
-
+	const { approvalId } = await verifyHumanAuthorization(approval, deriveBookingAction(booking))
+	// A real booking API must use approvalId as its persistent idempotency key.
+	// This mock returns the same confirmation for repeated use of one approval.
+	const confirmationNumber = `BK${approvalId.replaceAll('-', '').slice(0, 10).toUpperCase()}`
+	const row = (Number.parseInt(approvalId.slice(0, 4), 16) % 30) + 1
+	const suffix = booking.seatPreference === 'window' ? 'A' : booking.seatPreference === 'aisle' ? 'C' : 'B'
 	return {
 		success: true,
 		confirmationNumber,
-		passengerName,
-		flightNumber,
-		seatNumber,
-		message: 'Flight booked successfully! Check your email for confirmation.',
+		...booking,
+		seatNumber: `${row}${suffix}`,
+		message: 'Mock flight booking confirmed.',
 	}
 }
 
@@ -307,15 +259,9 @@ export async function checkBaggageAllowance({ airline, ticketClass }: { airline:
 export const flightBookingTools = {
 	bookingApproval: {
 		description:
-			'Request human approval via World ID for a specific flight booking. Returns an IDKitResult — its `action` field is what you pass to bookFlight. The approval is cryptographically bound to the booking details you provide here, so bookFlight will reject any approval that doesn\'t match.',
-		inputSchema: bookingParamsSchema.extend({
-			summary: z
-				.string()
-				.describe(
-					'Human-readable summary of the booking shown in the user\'s World app during approval. Should accurately describe the flight, date, passenger, price, and seat preference.'
-				),
-		}),
-		execute: requestHumanAuthorization<BookingParams & { summary: string }>({
+			'Request fresh World ID approval for these exact booking details. Pass the returned approval receipt to bookFlight unchanged.',
+		inputSchema: bookingParamsSchema,
+		execute: requestHumanAuthorization<BookingParams>({
 			action: ({ input }) => deriveBookingAction(input),
 		}),
 	},
@@ -344,12 +290,11 @@ export const flightBookingTools = {
 	},
 	bookFlight: {
 		description:
-			'Book a flight for a passenger. Requires the IDKitResult returned by a prior bookingApproval call as `approval`. The approval is re-verified against World ID and its action must match these exact booking details — bookFlight will throw otherwise.',
+			'Book the approved quote. Requires the full result from bookingApproval. The receipt must match the booking details and this workflow.',
 		inputSchema: bookingParamsSchema.extend({
 			approval: z
-				.object({ action: z.string() })
-				.passthrough()
-				.describe('The full IDKitResult returned by bookingApproval. Pass it through unchanged.'),
+				.object({ action: z.string(), approvalId: z.string(), receipt: z.string() })
+				.describe('The complete result from bookingApproval. Pass it through unchanged.'),
 		}),
 		execute: bookFlight,
 	},
@@ -371,9 +316,10 @@ export const FLIGHT_ASSISTANT_PROMPT = `You are a helpful flight booking assista
 - Check baggage allowances
 
 Be friendly and professional. When searching for flights, always ask for travel dates if not provided.
+Keep replies brief. The interface shows the booking details and confirmation, so do not repeat them in prose.
 
-To book a flight you MUST follow this exact two-step protocol:
-1. Call **bookingApproval** with the flightNumber, passengerName, seatPreference, and a clear summary of the booking. Wait for it to return an IDKitResult.
-2. Call **bookFlight** with the SAME flightNumber, passengerName, and seatPreference, plus the full IDKitResult from step 1 as the \`approval\` field (pass it through unchanged).
+To book a flight:
+1. Call bookingApproval with the selected quoteId, flightNumber, departure, price, currency, passengerName, and seatPreference. Wait for approval.
+2. Call bookFlight with exactly the same booking fields and the complete approval result as the approval field.
 
-bookFlight will re-verify the approval against World ID and reject the call if the action doesn't match the booking details. There is no way to book without a real, matching approval. Do not modify the booking details between the two calls.`
+The server verifies the receipt before booking. Do not change the approved details. This example creates mock bookings.`

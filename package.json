@@ -1,14 +1,27 @@
 {
 	"private": true,
-	"workspaces": ["packages/*", "examples/*"],
+	"workspaces": [
+		"packages/*",
+		"examples/*"
+	],
 	"scripts": {
-		"release": "bun run --filter './packages/*' build && changeset publish"
+		"build": "bun run --filter './packages/*' build",
+		"check": "bun run build && bun run typecheck && bun run test && bun run test:integration",
+		"release": "bun run check && changeset publish",
+		"test": "vitest run",
+		"test:integration": "vitest run --config vitest.integration.config.ts",
+		"typecheck": "bun run --filter './packages/*' typecheck && tsc --noEmit -p examples/flight-booking"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.29.4",
 		"@socketsecurity/bun-security-scanner": "^1.1.2",
+		"@testing-library/react": "^16.3.0",
+		"@types/node": "24.9.2",
+		"@workflow/vitest": "4.0.1-beta.7",
+		"jsdom": "^26.1.0",
 		"prettier": "^3.8.1",
-		"prettier-plugin-sort-imports-desc": "^1.0.0"
+		"prettier-plugin-sort-imports-desc": "^1.0.0",
+		"vitest": "^3.2.4"
 	},
 	"overrides": {
 		"zod": "4.1.12"

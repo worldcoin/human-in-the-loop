@@ -26,13 +26,14 @@ export default function ChatInput({
 	stop: () => void
 }) {
 	const [text, setText] = useState('')
+	const busy = status === 'submitted' || status === 'streaming'
 
 	return (
-		<div className="fixed bottom-2 w-full max-w-2xl bg-background">
+		<div className="w-full shrink-0 bg-background">
 			<PromptInput
 				onSubmit={(message: PromptInputMessage) => {
-					const hasText = Boolean(message.text)
-					if (!hasText) return
+					const hasText = Boolean(message.text?.trim())
+					if (!hasText || busy) return
 
 					sendMessage({
 						text: message.text || '',
@@ -44,6 +45,7 @@ export default function ChatInput({
 				<PromptInputBody>
 					<PromptInputTextarea
 						ref={textareaRef}
+						aria-label="Message the flight agent"
 						value={text}
 						onChange={e => setText(e.target.value)}
 						placeholder="Ask me about flights, airports, or bookings..."
@@ -54,6 +56,7 @@ export default function ChatInput({
 						<Button
 							type="button"
 							size="sm"
+							variant="ghost"
 							onClick={async () => {
 								await stop()
 								localStorage.removeItem('chat-history')
@@ -61,10 +64,21 @@ export default function ChatInput({
 								setText('')
 							}}
 						>
-							New Chat
+							New chat
 						</Button>
 					</PromptInputTools>
-					<PromptInputSubmit status={status} disabled={!text.trim()} />
+					<PromptInputSubmit
+						status={status}
+						variant="secondary"
+						aria-label={busy ? 'Stop response' : 'Send message'}
+						onClick={event => {
+							if (busy) {
+								event.preventDefault()
+								stop()
+							}
+						}}
+						disabled={!busy && !text.trim()}
+					/>
 				</PromptInputFooter>
 			</PromptInput>
 		</div>

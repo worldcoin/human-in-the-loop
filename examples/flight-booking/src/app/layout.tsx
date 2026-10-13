@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-	title: 'Flight Booking App',
-	description: 'A flight booking app using Workflow for durable agents.',
+	title: 'Human in the Loop · Flight booking',
+	description: 'An agent finds your flight. You approve each booking with World ID.',
 }
 
 export default function RootLayout({
@@ -24,7 +24,9 @@ export default function RootLayout({
 }>) {
 	return (
 		<html lang="en">
-			<body className={`${geistSans.variable} ${geistMono.variable} antialiased dark`}>{children}</body>
+			<body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased dark scheme-only-dark`}>
+				{children}
+			</body>
 		</html>
 	)
 }
