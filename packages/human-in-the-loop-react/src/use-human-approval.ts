@@ -13,7 +13,7 @@ export interface HumanApprovalContext {
 }
 
 export type HumanApprovalState =
-	| { status: 'idle' | 'verifying' | 'verified' | 'rejected' | 'expired' }
+	| { status: 'idle' | 'verifying' | 'rejecting' | 'verified' | 'rejected' | 'expired' }
 	| { status: 'error'; error: Error }
 
 export interface UseHumanApprovalResult extends Partial<HumanApprovalContext> {
@@ -32,7 +32,7 @@ export function useHumanApproval(message: UIMessage, part: UIMessage['parts'][nu
 	})
 	const submitting = useRef<string | undefined>(undefined)
 	let data: HumanApprovalContext | undefined
-	let serverStatus: Exclude<HumanApprovalState['status'], 'idle'> | undefined
+	let serverStatus: Exclude<HumanApprovalState['status'], 'idle' | 'rejecting'> | undefined
 	for (const item of message.parts) {
 		if (!toolCallId || !isDataUIPart(item) || item.id !== toolCallId) continue
 		if (item.type === 'data-approval-context') data = item.data as HumanApprovalContext
@@ -68,7 +68,7 @@ export function useHumanApproval(message: UIMessage, part: UIMessage['parts'][nu
 			return
 		}
 		submitting.current = toolCallId
-		setLocal({ toolCallId, state: { status: 'verifying' } })
+		setLocal({ toolCallId, state: { status: decision === 'reject' ? 'rejecting' : 'verifying' } })
 		let next: HumanApprovalState = {
 			status: 'error',
 			error: new Error('The decision could not be saved. Check the approval status before trying again.'),

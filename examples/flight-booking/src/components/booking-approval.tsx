@@ -12,6 +12,7 @@ const STATUS = {
 		'Complete approval in the other tab. This page will update automatically.',
 	],
 	verified: ['Approved by you', 'The agent can now book this flight.'],
+	rejecting: ['Saving your rejection', 'Wait while we save your decision.'],
 	rejected: ['Booking not approved', 'The agent will not book this request.'],
 	expired: ['Approval expired', 'Ask the agent for a new booking request.'],
 	error: ['Approval could not complete', 'Check the request, then try again.'],
@@ -21,7 +22,11 @@ export function BookingApproval({ message, part }: Pick<HumanApprovalProps, 'mes
 	const { ready, input, userCode, verificationUri, state, approve, reject } = useHumanApproval(message, part)
 	const booking = input as Omit<Parameters<typeof bookFlight>[0], 'approval'> | undefined
 	const [title, description] = STATUS[state.status]
-	const pending = state.status === 'idle' || state.status === 'verifying' || state.status === 'error'
+	const pending =
+		state.status === 'idle' ||
+		state.status === 'verifying' ||
+		state.status === 'rejecting' ||
+		state.status === 'error'
 	const Icon = state.status === 'verified' ? Check : Hand
 
 	return (
@@ -65,7 +70,7 @@ export function BookingApproval({ message, part }: Pick<HumanApprovalProps, 'mes
 					</dl>
 				</div>
 			)}
-			{pending && userCode && (
+			{pending && state.status !== 'rejecting' && userCode && (
 				<p className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
 					Match this code in World ID{' '}
 					<strong className="font-mono tracking-widest text-foreground">{userCode}</strong>

@@ -51,14 +51,15 @@ On approval, open `verificationUri` in a new tab from the click handler, then ca
 
 Read `state.status` to display progress:
 
-| Status      | Meaning                                                    |
-| ----------- | ---------------------------------------------------------- |
-| `idle`      | Waiting for a decision                                     |
-| `verifying` | Saving the decision or waiting for World ID authentication |
-| `verified`  | The server confirmed approval                              |
-| `rejected`  | The request was rejected                                   |
-| `expired`   | The approval deadline passed                               |
-| `error`     | The request failed; details are in `state.error`           |
+| Status      | Meaning                                                |
+| ----------- | ------------------------------------------------------ |
+| `idle`      | Waiting for a decision                                 |
+| `verifying` | Saving approval or waiting for World ID authentication |
+| `rejecting` | Saving rejection; decision controls are disabled       |
+| `verified`  | The server confirmed approval                          |
+| `rejected`  | The request was rejected                               |
+| `expired`   | The approval deadline passed                           |
+| `error`     | The request failed; details are in `state.error`       |
 
 Wait for `verified` before showing success. The operation's server step must still verify the returned receipt before it acts.
 

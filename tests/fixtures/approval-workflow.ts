@@ -7,6 +7,14 @@ async function protectedOperation(result: HumanApprovalResult, options: WorldIdO
 	return verifyHumanAuthorization(result, 'book:123', options)
 }
 
+export async function invalidReceiptWorkflow(options: WorldIdOptions) {
+	'use workflow'
+	return protectedOperation(
+		{ action: 'book:123', approvalId: 'invalid', receipt: 'private-invalid-receipt' },
+		options
+	)
+}
+
 export async function approvalWorkflow(options: WorldIdOptions, waitForContinuation = false) {
 	'use workflow'
 	const approve = requestHumanAuthorization<{ flight: string }>({ ...options, action: 'book:123' })

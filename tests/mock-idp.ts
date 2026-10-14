@@ -9,13 +9,15 @@ export async function mockIdp() {
 		starts: [] as { body: URLSearchParams; authorization?: string }[],
 		polls: [] as { body: URLSearchParams; authorization?: string; at: number }[],
 		responses: [] as (
-			| { error: string; status?: number }
+			| { error: string; status?: number; error_description?: string }
 			| { claims?: JWTPayload; wrongKey?: boolean; algorithm?: 'HS256'; tokenOverrides?: Record<string, unknown> }
 			| 'disconnect'
+			| 'timeout'
 		)[],
 		deviceOverrides: {} as Record<string, unknown>,
 		discoveryOverrides: {} as Record<string, unknown>,
 		disconnectStart: false,
+		deviceError: undefined as { error: string; status: number; error_description?: string } | undefined,
 		jwksRequests: 0,
 	}
 	let issuer = ''
@@ -42,6 +44,7 @@ export async function mockIdp() {
 		if (request.url === '/device') {
 			state.starts.push({ body, authorization: request.headers.authorization })
 			if (state.disconnectStart) return request.socket.destroy()
+			if (state.deviceError) return json(state.deviceError, state.deviceError.status)
 			return json({
 				device_code: `private-device-code-${state.starts.length}`,
 				user_code: 'TEST-CODE',
@@ -56,7 +59,8 @@ export async function mockIdp() {
 			state.polls.push({ body, authorization: request.headers.authorization, at: Date.now() })
 			const next = state.responses.shift() ?? { error: 'authorization_pending' }
 			if (next === 'disconnect') return request.socket.destroy()
-			if ('error' in next) return json({ error: next.error }, next.status ?? 400)
+			if (next === 'timeout') return
+			if ('error' in next) return json(next, next.status ?? 400)
 			const now = Math.floor(Date.now() / 1000)
 			const idToken = await new SignJWT({
 				iss: issuer,

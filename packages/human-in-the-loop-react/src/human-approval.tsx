@@ -32,7 +32,7 @@ export function HumanApproval({
 			{input !== undefined && (
 				<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(input, null, 2)}</pre>
 			)}
-			{userCode && (
+			{userCode && state.status !== 'rejecting' && state.status !== 'rejected' && (
 				<p>
 					Check this code on World ID: <strong>{userCode}</strong>
 				</p>
@@ -64,6 +64,7 @@ export function HumanApproval({
 					Open World ID again
 				</a>
 			)}
+			{state.status === 'rejecting' && <p role="status">Saving your rejection.</p>}
 			{state.status === 'rejected' && <p role="status">Approval rejected.</p>}
 			{state.status === 'expired' && <p role="status">Approval expired. Request a new approval.</p>}
 			{state.status === 'error' && <p role="alert">{state.error.message}</p>}

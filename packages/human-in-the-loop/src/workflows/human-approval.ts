@@ -1,6 +1,12 @@
 import type { ToolCallOptions, UIMessageChunk } from 'ai'
 import { createWebhook, FatalError, getWorkflowMetadata, getWritable, sleep, type RequestWithResponse } from 'workflow'
-import { pollDeviceAuthorization, startDeviceAuthorization, verifyReceipt, type DeviceAttempt } from '../idp'
+import {
+	approvalFailure,
+	pollDeviceAuthorization,
+	startDeviceAuthorization,
+	verifyReceipt,
+	type DeviceAttempt,
+} from '../idp'
 import type { HumanApprovalContext, HumanApprovalResult, HumanApprovalStatus, WorldIdOptions } from '../types'
 
 export interface ActionContext<TInput = unknown> extends ToolCallOptions {
@@ -16,9 +22,9 @@ async function initiate(action: string, workflowRunId: string, options: WorldIdO
 	'use step'
 	try {
 		return await startDeviceAuthorization(action, workflowRunId, options)
-	} catch {
+	} catch (error) {
 		throw new FatalError(
-			'World ID could not start approval. Check the client configuration and start a new request.'
+			`World ID could not start approval (${approvalFailure(error, 'initiate')}). Check the client configuration and start a new request.`
 		)
 	}
 }
@@ -28,9 +34,11 @@ async function poll(attempt: DeviceAttempt, options: WorldIdOptions) {
 	'use step'
 	try {
 		return await pollDeviceAuthorization(attempt, options)
-	} catch {
+	} catch (error) {
 		// Token validation errors can contain identity claims. Do not persist them.
-		throw new FatalError('World ID approval could not be verified. Start a new approval request.')
+		throw new FatalError(
+			`World ID approval failed (${approvalFailure(error, 'poll')}). Start a new approval request.`
+		)
 	}
 }
 poll.maxRetries = 0
@@ -75,8 +83,10 @@ export async function verifyHumanAuthorization(
 	'use step'
 	try {
 		return await verifyReceipt(result, action, getWorkflowMetadata().workflowRunId, options)
-	} catch {
-		throw new FatalError('A valid approval for this action and workflow is required.')
+	} catch (error) {
+		throw new FatalError(
+			`A valid approval for this action and workflow is required (${approvalFailure(error, 'receipt')}).`
+		)
 	}
 }
 
@@ -115,14 +125,16 @@ export function requestHumanAuthorization<TInput = unknown>(options: RequestHuma
 			if (decision === 'approve') {
 				await emit(toolCallId, 'data-approval-status', { status: 'verifying' })
 				let interval = attempt.interval
-				while (Date.now() < attempt.expiresAt) {
-					await sleep(Math.min(interval * 1000, attempt.expiresAt - Date.now()))
+				// Use the recorded poll result to keep Workflow replay consistent at expiry.
+				while (true) {
+					await sleep(new Date(Math.min(Date.now() + interval * 1000, attempt.expiresAt)))
 					const result = await poll(attempt, idpOptions)
 					if (result.status === 'approved') {
 						await emit(toolCallId, 'data-approval-status', { status: 'verified' })
 						return result.result
 					}
 					if (result.status === 'slow_down') interval += 5
+					if (result.status === 'connection_error') interval *= 2
 					if (result.status === 'rejected' || result.status === 'expired') {
 						status = result.status
 						break
@@ -131,8 +143,9 @@ export function requestHumanAuthorization<TInput = unknown>(options: RequestHuma
 			} else if (decision === 'reject') {
 				status = 'rejected'
 			}
-		} catch {
-			status = 'error'
+		} catch (error) {
+			await emit(toolCallId, 'data-approval-status', { status: 'error' })
+			throw error
 		}
 		await emit(toolCallId, 'data-approval-status', { status })
 		throw new FatalError(`Human approval ${status}. Start a new approval request if needed.`)

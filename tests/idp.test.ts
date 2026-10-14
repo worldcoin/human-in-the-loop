@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { decodeJwt } from 'jose'
 import {
+	approvalFailure,
 	configuration,
 	pollDeviceAuthorization,
 	startDeviceAuthorization,
@@ -86,8 +87,41 @@ it.each([
 	['authorization_pending', 503],
 ])('stops on %s with HTTP %s', async (error, status) => {
 	idp.state.responses.push({ error, status })
-	await expect(pollDeviceAuthorization(await start(), idp.options)).rejects.toThrow('approval failed')
+	const failure = await pollDeviceAuthorization(await start(), idp.options).catch(error => error)
+	expect(failure).toBeInstanceOf(Error)
+	expect(approvalFailure(failure, 'poll')).toBe(`token_response:http_${status}`)
 	expect(idp.state.polls).toHaveLength(1)
+})
+
+it('reports the HTTP status when an error response is not JSON', async () => {
+	const attempt = await start()
+	vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('private-error-text', { status: 503 }))
+	const failure = await pollDeviceAuthorization(attempt, idp.options).catch(error => error)
+	expect(approvalFailure(failure, 'poll')).toBe('token_response:http_503')
+})
+
+it.each([
+	[{ acr: 'private-invalid-assurance' }, 'acr'],
+	[{ auth_time: 1 }, 'auth_time'],
+	[{ amr: ['private-invalid-method'] }, 'amr'],
+])('reports a fixed failure code for invalid claims %j', async (claims, code) => {
+	idp.state.responses.push({ claims })
+	const failure = await pollDeviceAuthorization(await start(), idp.options).catch(error => error)
+	expect(approvalFailure(failure, 'poll')).toBe(code)
+	expect(JSON.stringify(failure)).not.toContain('private-')
+})
+
+it('reports a signature timeout without the request details', async () => {
+	const attempt = await start()
+	idp.state.responses.push({})
+	const fetch = globalThis.fetch
+	vi.spyOn(globalThis, 'fetch').mockImplementation((...args) => {
+		if (String(args[0]).endsWith('/jwks')) throw new DOMException('private-request-details', 'TimeoutError')
+		return fetch(...args)
+	})
+	const failure = await pollDeviceAuthorization(attempt, idp.options).catch(error => error)
+	expect(approvalFailure(failure, 'poll')).toBe('signature:timeout')
+	expect(failure.message).not.toContain('private-')
 })
 
 describe('ID token verification', () => {
@@ -190,15 +224,22 @@ it('does not poll an expired attempt', async () => {
 	expect(idp.state.polls).toHaveLength(0)
 })
 
-it('fails closed on lost initiation and token responses', async () => {
+it('ends a lost initiation and retries a lost token response', async () => {
 	idp.state.disconnectStart = true
 	await expect(start()).rejects.toThrow()
 	expect(idp.state.starts).toHaveLength(1)
 	idp.state.disconnectStart = false
 	const attempt = await start()
-	idp.state.responses.push('disconnect')
-	await expect(pollDeviceAuthorization(attempt, idp.options)).rejects.toThrow()
-	expect(idp.state.polls).toHaveLength(1)
+	idp.state.responses.push('disconnect', {})
+	expect(await pollDeviceAuthorization(attempt, idp.options)).toEqual({ status: 'connection_error' })
+	expect((await pollDeviceAuthorization(attempt, idp.options)).status).toBe('approved')
+	expect(idp.state.polls).toHaveLength(2)
+})
+
+it('retries a token request timeout', async () => {
+	const attempt = await start()
+	vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new DOMException('The request timed out.', 'TimeoutError'))
+	expect(await pollDeviceAuthorization(attempt, idp.options)).toEqual({ status: 'connection_error' })
 })
 
 it('rejects mismatched discovery and off-origin endpoints before sending credentials', async () => {

@@ -9,15 +9,38 @@ const CLOCK_TOLERANCE = 30
 const REQUEST_TIMEOUT = 10_000
 const jwks = new Map<string, oauth.JWKSCacheInput>()
 
+class ApprovalError extends Error {
+	readonly code: string
+	constructor(code: string, message: string) {
+		super(message)
+		this.code = code
+	}
+}
+
+/** Return fixed failure codes without tokens, claims, or provider error text. */
+export function approvalFailure(error: unknown, stage: string): string {
+	if (error instanceof ApprovalError) return error.code
+	if (error instanceof oauth.ResponseBodyError || error instanceof oauth.WWWAuthenticateChallengeError)
+		return `${stage}:http_${error.status}`
+	if (error instanceof oauth.OperationProcessingError && 'cause' in error && error.cause instanceof Response)
+		return `${stage}:http_${error.cause.status}`
+	if (error instanceof Error && error.name === 'TimeoutError') return `${stage}:timeout`
+	return stage
+}
+
 export function configuration(options: WorldIdOptions = {}) {
 	const issuer = (options.issuer ?? process.env.WORLD_ID_ISSUER ?? 'https://auth.world.org').replace(/\/$/, '')
 	const clientId = options.clientId ?? process.env.WORLD_ID_CLIENT_ID
 	const clientSecret = options.clientSecret ?? process.env.WORLD_ID_CLIENT_SECRET
 	const clientAuthMethod =
 		options.clientAuthMethod ?? process.env.WORLD_ID_CLIENT_AUTH_METHOD ?? 'client_secret_basic'
-	if (!clientId || !clientSecret) throw new Error('Set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET.')
+	if (!clientId || !clientSecret)
+		throw new ApprovalError('configuration', 'Set WORLD_ID_CLIENT_ID and WORLD_ID_CLIENT_SECRET.')
 	if (clientAuthMethod !== 'client_secret_basic' && clientAuthMethod !== 'client_secret_post') {
-		throw new Error('Use a client registered with client_secret_basic or client_secret_post.')
+		throw new ApprovalError(
+			'configuration',
+			'Use a client registered with client_secret_basic or client_secret_post.'
+		)
 	}
 	const url = new URL(issuer)
 	if (
@@ -28,7 +51,7 @@ export function configuration(options: WorldIdOptions = {}) {
 		(url.protocol !== 'https:' &&
 			!(url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)))
 	) {
-		throw new Error('The World ID issuer must use HTTPS, or HTTP on a loopback host.')
+		throw new ApprovalError('configuration', 'The World ID issuer must use HTTPS, or HTTP on a loopback host.')
 	}
 	return { issuer, clientId, clientSecret, clientAuthMethod }
 }
@@ -117,14 +140,14 @@ function receiptKey(config: Configuration) {
 
 function validateWorldApproval(claims: oauth.IDToken, attempt: DeviceAttempt) {
 	if (!claims.sub || typeof claims.jti !== 'string' || !claims.jti) {
-		throw new Error('World ID returned an invalid identity token.')
+		throw new ApprovalError('identity', 'World ID returned an invalid identity token.')
 	}
 	if (claims.azp !== undefined && claims.azp !== attempt.clientId) {
-		throw new Error('World ID returned a token for a different client.')
+		throw new ApprovalError('azp', 'World ID returned a token for a different client.')
 	}
 	const now = Math.floor(Date.now() / 1000)
 	if (Date.now() >= attempt.expiresAt || claims.exp <= now || claims.iat > now + CLOCK_TOLERANCE) {
-		throw new Error('World ID approval expired or has invalid token times.')
+		throw new ApprovalError('token_time', 'World ID approval expired or has invalid token times.')
 	}
 	const authTime = claims.auth_time
 	if (
@@ -133,27 +156,25 @@ function validateWorldApproval(claims: oauth.IDToken, attempt: DeviceAttempt) {
 		authTime < Math.floor(attempt.startedAt / 1000) - CLOCK_TOLERANCE ||
 		authTime > now + CLOCK_TOLERANCE
 	) {
-		throw new Error('World ID did not provide fresh authentication for this approval.')
+		throw new ApprovalError('auth_time', 'World ID did not provide fresh authentication for this approval.')
 	}
-	if (
-		claims.acr !== 'https://world.org/oidc/acr/orb-v3' ||
-		!Array.isArray(claims.amr) ||
-		!claims.amr.includes('pop')
-	) {
-		throw new Error('World ID did not provide the required assurance.')
-	}
+	if (claims.acr !== 'https://world.org/oidc/acr/orb-v3')
+		throw new ApprovalError('acr', 'World ID did not provide the required assurance.')
+	if (!Array.isArray(claims.amr) || !claims.amr.includes('pop'))
+		throw new ApprovalError('amr', 'World ID did not provide proof of personhood.')
 }
 
 export async function pollDeviceAuthorization(
 	attempt: DeviceAttempt,
 	options: WorldIdOptions
 ): Promise<
-	{ status: 'pending' | 'slow_down' | 'rejected' | 'expired' } | { status: 'approved'; result: HumanApprovalResult }
+	| { status: 'pending' | 'slow_down' | 'connection_error' | 'rejected' | 'expired' }
+	| { status: 'approved'; result: HumanApprovalResult }
 > {
 	if (Date.now() >= attempt.expiresAt) return { status: 'expired' }
 	const config = configuration(options)
 	if (config.issuer !== attempt.issuer || config.clientId !== attempt.clientId) {
-		throw new Error('World ID configuration changed. Start a new approval request.')
+		throw new ApprovalError('configuration', 'World ID configuration changed. Start a new approval request.')
 	}
 	const server: oauth.AuthorizationServer = {
 		issuer: attempt.issuer,
@@ -161,13 +182,18 @@ export async function pollDeviceAuthorization(
 		jwks_uri: attempt.jwksUri,
 	}
 	const { client, clientAuth } = oidcClient(config)
-	const response = await oauth.deviceCodeGrantRequest(
-		server,
-		client,
-		clientAuth,
-		attempt.deviceCode,
-		requestOptions(config.issuer, attempt.expiresAt)
-	)
+	let response: Response
+	try {
+		response = await oauth.deviceCodeGrantRequest(
+			server,
+			client,
+			clientAuth,
+			attempt.deviceCode,
+			requestOptions(config.issuer, attempt.expiresAt)
+		)
+	} catch {
+		return { status: 'connection_error' }
+	}
 	let tokens: oauth.TokenEndpointResponse
 	try {
 		tokens = await oauth.processDeviceCodeResponse(server, client, response)
@@ -178,21 +204,28 @@ export async function pollDeviceAuthorization(
 			if (error.error === 'access_denied') return { status: 'rejected' }
 			if (error.error === 'expired_token') return { status: 'expired' }
 		}
-		throw new Error('World ID approval failed. Start a new approval request.')
+		throw new ApprovalError(
+			approvalFailure(error, 'token_response'),
+			'World ID approval failed. Start a new approval request.'
+		)
 	}
 	const claims = oauth.getValidatedIdTokenClaims(tokens)
 	if (!claims || tokens.token_type !== 'bearer') {
-		throw new Error('World ID returned an invalid token response.')
+		throw new ApprovalError('token_response', 'World ID returned an invalid token response.')
 	}
 	let keys = jwks.get(attempt.jwksUri)
 	if (!keys) {
 		keys = {}
 		jwks.set(attempt.jwksUri, keys)
 	}
-	await oauth.validateApplicationLevelSignature(server, response, {
-		...requestOptions(config.issuer, attempt.expiresAt),
-		[oauth.jwksCache]: keys,
-	})
+	try {
+		await oauth.validateApplicationLevelSignature(server, response, {
+			...requestOptions(config.issuer, attempt.expiresAt),
+			[oauth.jwksCache]: keys,
+		})
+	} catch (error) {
+		throw new ApprovalError(approvalFailure(error, 'signature'), 'World ID could not verify the token signature.')
+	}
 	validateWorldApproval(claims, attempt)
 	const now = Math.floor(Date.now() / 1000)
 	const receipt = await new SignJWT({ action: attempt.action, workflowRunId: attempt.workflowRunId })

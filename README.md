@@ -118,7 +118,9 @@ Both helpers accept `issuer`, `clientId`, `clientSecret`, and `clientAuthMethod`
 
 Workflow 4 keeps the decision deadline after the human responds. It can schedule an extra wake or report a pending sleep when a run ends. The integration tests check that the later wake does not repeat approval or the protected operation.
 
-The package follows the IdP's polling interval and adjusts it when the IdP requests a delay. Rejection, expiry, and validation errors end the attempt. If an initiation or token request fails, start a new approval attempt.
+The package follows the IdP's polling interval and adds five seconds when the IdP returns `slow_down`. After a connection failure or timeout, it doubles the interval and polls the same attempt again. The original expiry still applies. Rejection, expiry, HTTP 429, HTTP 503, and other OAuth or validation errors end the attempt. If initiation fails, start a new approval attempt.
+
+Workflow errors include a fixed failure code, such as `initiate:http_401`, `token_response:http_503`, `signature:timeout`, `auth_time`, or `acr`. These codes identify the failed stage or HTTP status. They do not include tokens, identity claims, or provider error text.
 
 The server validates IdP tokens within a polling step and returns the approval result to the agent. Workflow stores pending device codes in its event data. Restrict access to that data and its inspection tools; encryption depends on the Workflow backend.
 
