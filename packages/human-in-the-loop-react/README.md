@@ -1,111 +1,73 @@
 # @worldcoin/human-in-the-loop-react
 
-React bindings for [`@worldcoin/human-in-the-loop`](https://www.npmjs.com/package/@worldcoin/human-in-the-loop). Renders the World ID approval flow on the client when an AI agent pauses for human authorization.
-
-This package only handles the client side. You also need `@worldcoin/human-in-the-loop` on your server, wired into a Workflow SDK / AI SDK tool — see the [main repo README](https://github.com/worldcoin/human-in-the-loop#readme) for the server setup.
-
-## Install
+Show human approval requests from `@worldcoin/human-in-the-loop` in a React chat interface.
 
 ```bash
 bun add @worldcoin/human-in-the-loop-react
-# or
-npm install @worldcoin/human-in-the-loop-react
 ```
 
-Peer dependencies: `react >=18`, `ai >=5`, `@worldcoin/idkit >=4`.
+Requires React 18 or later and AI SDK 5. Configure the server package with the [application guide](https://github.com/worldcoin/human-in-the-loop#readme).
 
-## Environment
+## Component
 
-```bash
-NEXT_PUBLIC_WORLD_APP_ID=app_...
-```
-
-The component reads `app_id` from this env var by default. You can override it via the `appId` prop instead.
-
-## `<HumanApproval>` — drop-in component
-
-The 80% case. Drop it into your message renderer wherever the approval tool's part shows up.
+Render `HumanApproval` for the approval tool's message part:
 
 ```tsx
-import { HumanApproval } from '@worldcoin/human-in-the-loop-react'
+'use client'
 
-{message.parts.map(part => {
-  if (part.type === 'tool-approveAction' && 'toolCallId' in part) {
-    return <HumanApproval key={part.toolCallId} message={message} part={part} />
-  }
-  // ...your other part renderers
-})}
-```
+import { HumanApproval, type HumanApprovalProps } from '@worldcoin/human-in-the-loop-react'
 
-It finds the streamed `data-approval-context` chunk for this tool call, renders a "Verify with World ID" button, opens `IDKitRequestWidget` when clicked, POSTs the proof back to the server's webhook, and shows a success or error state.
-
-### Props
-
-| Prop | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `message` | `UIMessage` | required | The full message containing the tool part — used to locate the streamed approval context. |
-| `part` | `UIMessagePart` | required | The tool-call part. Must include `toolCallId`. |
-| `appId` | `` `app_${string}` `` | `process.env.NEXT_PUBLIC_WORLD_APP_ID` | World developer portal app ID. |
-| `preset` | `Preset` | `orbLegacy()` | IDKit preset. |
-| `allowLegacyProofs` | `boolean` | `false` | Accept v3 World ID proofs as a fallback. |
-| `triggerLabel` | `ReactNode` | `'Verify with World ID'` | Button label. |
-| `successContent` | `ReactNode` | `'Approved with World ID.'` | Content shown after the proof verifies. |
-| `className` | `string` | — | Applied to the outer wrapper. The component ships unstyled — bring your own CSS. |
-
-The component is wrapped in `React.memo`, so it only re-renders when `message`, `part`, or its other props change.
-
-## `useHumanApproval` — headless hook
-
-For custom UI. The hook handles all the wiring — finding the chunk, exposing the verify callback, tracking state — and lets you render whatever you want.
-
-```tsx
-import { useHumanApproval } from '@worldcoin/human-in-the-loop-react'
-import { IDKitRequestWidget, orbLegacy } from '@worldcoin/idkit'
-import { useState } from 'react'
-
-function MyApproval({ message, part }) {
-  const [open, setOpen] = useState(false)
-  const { ready, action, rpContext, state, verify } = useHumanApproval(message, part)
-
-  if (state.status === 'verified') return <p>Approved.</p>
-
-  return (
-    <>
-      <button disabled={!ready} onClick={() => setOpen(true)}>
-        {state.status === 'verifying' ? 'Verifying…' : 'Approve'}
-      </button>
-      {state.status === 'error' && <p>{state.error.message}</p>}
-
-      {ready && (
-        <IDKitRequestWidget
-          open={open}
-          onOpenChange={setOpen}
-          onSuccess={() => {}}
-          handleVerify={verify}
-          app_id={process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`}
-          action={action!}
-          rp_context={rpContext!}
-          preset={orbLegacy()}
-          allow_legacy_proofs={false}
-        />
-      )}
-    </>
-  )
+export function Approval({ message, part }: HumanApprovalProps) {
+	return <HumanApproval message={message} part={part} />
 }
 ```
 
-### Return value
+The component shows the action, its inputs, and a user code. The human can select **Approve with World ID** or **Reject**. Approval opens World ID in a new tab. The human compares the user code and completes authentication. The component shows success after the server validates the result.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `ready` | `boolean` | True once the streamed approval context has arrived from the server. |
-| `action` | `string \| undefined` | The action string the server signed for this tool call. Pass to `IDKitRequestWidget`'s `action`. |
-| `rpContext` | `RpContext \| undefined` | Pass to `IDKitRequestWidget`'s `rp_context`. |
-| `webhookUrl` | `string \| undefined` | The webhook URL the proof gets POSTed to. The hook handles this for you via `verify`; exposed for advanced cases. |
-| `state` | `HumanApprovalState` | Discriminated union: `{ status: 'idle' \| 'verifying' \| 'verified' } \| { status: 'error', error }`. |
-| `verify` | `(proof: IDKitResult) => Promise<void>` | Wire to `IDKitRequestWidget.handleVerify`. POSTs the proof to the webhook and updates `state`. |
+| Prop             | Purpose                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| `message`        | AI SDK message with the approval context and status                 |
+| `part`           | The approval tool's message part                                    |
+| `triggerLabel`   | Approve button content; defaults to `Approve with World ID`         |
+| `successContent` | Content shown after approval; defaults to `Approved with World ID.` |
+| `className`      | CSS class on the outer wrapper                                      |
 
-The hook caches the first hit on the streamed `data-approval-context` chunk, so it doesn't rescan `message.parts` on every streaming token.
+## Custom UI
+
+Use `useHumanApproval` in a client component to read the request and send a decision:
+
+```tsx
+import { useHumanApproval } from '@worldcoin/human-in-the-loop-react'
+
+const { ready, action, input, verificationUri, userCode, expiresAt, state, approve, reject } = useHumanApproval(
+	message,
+	part
+)
+```
+
+Enable decision controls when `ready` is true. It is false while a decision is in progress or after the request ends. Show `action`, `input`, and `userCode` before the human decides. `expiresAt` is the request deadline as a Unix timestamp in milliseconds.
+
+On approval, open `verificationUri` in a new tab from the click handler, then call `approve()` to save the decision. Use `noopener,noreferrer` when opening the tab. The hook leaves navigation to your component. Call `reject()` to reject the request.
+
+Read `state.status` to display progress:
+
+| Status      | Meaning                                                |
+| ----------- | ------------------------------------------------------ |
+| `idle`      | Waiting for a decision                                 |
+| `verifying` | Saving approval or waiting for World ID authentication |
+| `rejecting` | Saving rejection; decision controls are disabled       |
+| `verified`  | The server confirmed approval                          |
+| `rejected`  | The request was rejected                               |
+| `expired`   | The approval deadline passed                           |
+| `error`     | The request failed; details are in `state.error`       |
+
+Wait for `verified` before showing success. The operation's server step must still verify the returned receipt before it acts.
+
+For direct webhook integration, the hook also exposes `webhookUrl`. Send a JSON POST request with `decision` set to `approve` or `reject` and `action` set to the hook's action value. Set `Content-Type: application/json`. Keep the approval context private to the intended human's conversation.
+
+## Upgrade
+
+This release removes the `appId`, `preset`, and `allowLegacyProofs` props. It also removes `rpContext` and `verify(proof)`. Upgrade the server and React packages together. Follow the [migration steps](https://github.com/worldcoin/human-in-the-loop#upgrade-from-idkit).
 
 ## License
 

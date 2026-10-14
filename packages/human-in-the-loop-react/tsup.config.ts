@@ -7,7 +7,7 @@ export default defineConfig({
 	sourcemap: true,
 	clean: true,
 	splitting: false,
-	external: ['react', 'ai', '@worldcoin/idkit'],
+	external: ['react', 'ai'],
 	banner: {
 		js: "'use client'",
 	},

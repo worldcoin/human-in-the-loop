@@ -1,153 +1,153 @@
 import type { ToolCallOptions, UIMessageChunk } from 'ai'
-import { signRequest } from '@worldcoin/idkit-server'
-import type { IDKitResult, RpContext } from '@worldcoin/idkit-core'
-import { createWebhook, getWritable, type RequestWithResponse } from 'workflow'
+import { createWebhook, FatalError, getWorkflowMetadata, getWritable, sleep, type RequestWithResponse } from 'workflow'
+import {
+	approvalFailure,
+	pollDeviceAuthorization,
+	startDeviceAuthorization,
+	verifyReceipt,
+	type DeviceAttempt,
+} from '../idp'
+import type { HumanApprovalContext, HumanApprovalResult, HumanApprovalStatus, WorldIdOptions } from '../types'
 
 export interface ActionContext<TInput = unknown> extends ToolCallOptions {
-	/** The tool input — typed via the generic on `requestHumanAuthorization<TInput>()`. */
 	input: TInput
 }
 
-export interface RequestHumanAuthorizationOptions<TInput = unknown> {
-	/**
-	 * Action string the World ID proof is bound to. Must be unique per verification
-	 * (no developer-portal registration needed). Pass a string for static actions, or
-	 * a function for content-bound ones (e.g. derived from input fields to prevent
-	 * replay across calls). Defaults to `toolCallId`.
-	 */
+export interface RequestHumanAuthorizationOptions<TInput = unknown> extends WorldIdOptions {
+	/** Bind approval to the operation's inputs. Defaults to toolCallId. */
 	action?: string | ((context: ActionContext<TInput>) => string)
-	/** Hex-encoded RP signing key. Defaults to `process.env.WORLD_SIGNING_KEY`. */
-	signingKey?: string
-	/** Relying-party ID. Defaults to `process.env.WORLD_RP_ID`. */
-	rpId?: string
 }
 
-export interface HumanApprovalContext {
-	webhookUrl: string
-	action: string
-	rpContext: RpContext
-}
-
-interface EmitApprovalContextArgs {
-	toolCallId: string
-	webhookUrl: string
-	action: string
-	signingKey: string
-	rpId: string
-}
-
-async function emitApprovalContext({ toolCallId, webhookUrl, action, signingKey, rpId }: EmitApprovalContextArgs) {
+async function initiate(action: string, workflowRunId: string, options: WorldIdOptions) {
 	'use step'
-
-	const { sig, nonce, createdAt, expiresAt } = signRequest({
-		signingKeyHex: signingKey,
-		action,
-	})
-
-	const writable = getWritable<UIMessageChunk>()
-	const writer = writable.getWriter()
-	await writer.write({
-		id: toolCallId,
-		type: 'data-approval-context',
-		data: {
-			webhookUrl,
-			action,
-			rpContext: {
-				nonce,
-				signature: sig,
-				created_at: createdAt,
-				expires_at: expiresAt,
-				rp_id: rpId,
-			},
-		} satisfies HumanApprovalContext,
-	})
-	// `getWritable` returns a shared writable owned by the workflow runtime; release the
-	// lock instead of closing it so other steps can keep writing to the same stream.
-	writer.releaseLock()
-}
-
-interface VerifyAndRespondArgs {
-	request: RequestWithResponse
-	proof: IDKitResult
-	rpId: string
-}
-
-async function verifyAndRespond({ request, proof, rpId }: VerifyAndRespondArgs) {
-	'use step'
-
-	const verifyResponse = await fetch(`https://developer.world.org/api/v4/verify/${rpId}`, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(proof),
-	})
-
-	if (!verifyResponse.ok) {
-		const error = await verifyResponse.text()
-		console.error('World ID verification failed:', error)
-
-		await request.respondWith(
-			new Response(JSON.stringify({ error: 'Verification failed' }), {
-				status: verifyResponse.status,
-				headers: { 'Content-Type': 'application/json' },
-			})
+	try {
+		return await startDeviceAuthorization(action, workflowRunId, options)
+	} catch (error) {
+		throw new FatalError(
+			`World ID could not start approval (${approvalFailure(error, 'initiate')}). Check the client configuration and start a new request.`
 		)
-
-		throw new Error(`World ID verification failed: ${error}`)
 	}
+}
+initiate.maxRetries = 0
 
-	console.log('World ID verification succeeded')
-	await request.respondWith(new Response('Verified!', { status: 200 }))
+async function poll(attempt: DeviceAttempt, options: WorldIdOptions) {
+	'use step'
+	try {
+		return await pollDeviceAuthorization(attempt, options)
+	} catch (error) {
+		// Token validation errors can contain identity claims. Do not persist them.
+		throw new FatalError(
+			`World ID approval failed (${approvalFailure(error, 'poll')}). Start a new approval request.`
+		)
+	}
+}
+poll.maxRetries = 0
 
-	return proof
+async function emit(toolCallId: string, type: 'data-approval-context' | 'data-approval-status', data: unknown) {
+	'use step'
+	const writer = getWritable<UIMessageChunk>().getWriter()
+	try {
+		await writer.write({ id: toolCallId, type, data })
+	} finally {
+		writer.releaseLock()
+	}
 }
 
-/**
- * Build a tool `execute` function that pauses the workflow until a real human
- * approves the action via World ID. The bound `action` defaults to the per-call
- * `toolCallId` (already unique per verification); pass a function to derive your
- * own. `signingKey` and `rpId` fall back to `WORLD_SIGNING_KEY` / `WORLD_RP_ID`
- * env vars if omitted.
- */
-export function requestHumanAuthorization<TInput = unknown>(
-	options: RequestHumanAuthorizationOptions<TInput> = {}
+async function readDecision(request: RequestWithResponse, action: string, expiresAt: number) {
+	'use step'
+	let decision: 'approve' | 'reject' | undefined
+	if (
+		request.method === 'POST' &&
+		request.headers.get('content-type')?.startsWith('application/json') &&
+		Date.now() < expiresAt
+	) {
+		try {
+			const data = (await request.json()) as { action?: unknown; decision?: unknown } | null
+			if (data?.action === action && (data.decision === 'approve' || data.decision === 'reject'))
+				decision = data.decision
+		} catch {
+			// Invalid input cannot approve an action.
+		}
+	}
+	await request.respondWith(new Response(null, { status: decision ? 202 : 400 }))
+	return decision
+}
+readDecision.maxRetries = 0
+
+/** Verify a receipt inside a protected Workflow step before the operation. */
+export async function verifyHumanAuthorization(
+	result: HumanApprovalResult,
+	action: string,
+	options: WorldIdOptions = {}
 ) {
-	const { action, signingKey, rpId } = options
-
-	const resolvedSigningKey = signingKey ?? process.env.WORLD_SIGNING_KEY
-	const resolvedRpId = rpId ?? process.env.WORLD_RP_ID
-
-	if (!resolvedSigningKey) {
-		throw new Error(
-			'requestHumanAuthorization: `signingKey` was not provided and `WORLD_SIGNING_KEY` is not set in the environment'
+	'use step'
+	try {
+		return await verifyReceipt(result, action, getWorkflowMetadata().workflowRunId, options)
+	} catch (error) {
+		throw new FatalError(
+			`A valid approval for this action and workflow is required (${approvalFailure(error, 'receipt')}).`
 		)
 	}
-	if (!resolvedRpId) {
-		throw new Error(
-			'requestHumanAuthorization: `rpId` was not provided and `WORLD_RP_ID` is not set in the environment'
-		)
+}
+
+async function waitForDecision(attempt: DeviceAttempt, toolCallId: string, input: unknown) {
+	using webhook = createWebhook({ respondWith: 'manual' })
+	await emit(toolCallId, 'data-approval-context', {
+		webhookUrl: webhook.url,
+		action: attempt.action,
+		input,
+		verificationUri: attempt.verificationUri,
+		userCode: attempt.userCode,
+		expiresAt: attempt.expiresAt,
+	} satisfies HumanApprovalContext)
+	// Workflow 4 cannot cancel this deadline after a decision arrives.
+	const deadline = sleep(new Date(attempt.expiresAt))
+	while (Date.now() < attempt.expiresAt) {
+		const request = await Promise.race([webhook, deadline])
+		if (!request) break
+		const decision = await readDecision(request, attempt.action, attempt.expiresAt)
+		if (decision) return decision
 	}
+	return 'expired' as const
+}
 
-	return async function execute(input: TInput, options: ToolCallOptions): Promise<IDKitResult> {
-		const { toolCallId } = options
-		const resolvedAction =
-			typeof action === 'function' ? action({ ...options, input }) : (action ?? toolCallId)
-
-		const webhook = createWebhook({ respondWith: 'manual' })
-
-		await emitApprovalContext({
-			toolCallId,
-			webhookUrl: webhook.url,
-			action: resolvedAction,
-			signingKey: resolvedSigningKey,
-			rpId: resolvedRpId,
-		})
-
-		const request = await webhook
-		const proof = (await request.json()) as IDKitResult
-
-		await verifyAndRespond({ request, proof, rpId: resolvedRpId })
-		webhook.dispose()
-
-		return proof
+/** Build a tool that waits for action confirmation and fresh World authentication. */
+export function requestHumanAuthorization<TInput = unknown>(options: RequestHumanAuthorizationOptions<TInput> = {}) {
+	const { action, ...idpOptions } = options
+	return async function execute(input: TInput, toolOptions: ToolCallOptions): Promise<HumanApprovalResult> {
+		const { toolCallId } = toolOptions
+		const resolvedAction = typeof action === 'function' ? action({ ...toolOptions, input }) : (action ?? toolCallId)
+		if (!resolvedAction) throw new FatalError('The approval action must not be empty.')
+		let status: HumanApprovalStatus = 'expired'
+		try {
+			const attempt = await initiate(resolvedAction, getWorkflowMetadata().workflowRunId, idpOptions)
+			const decision = await waitForDecision(attempt, toolCallId, input)
+			if (decision === 'approve') {
+				await emit(toolCallId, 'data-approval-status', { status: 'verifying' })
+				let interval = attempt.interval
+				// Use the recorded poll result to keep Workflow replay consistent at expiry.
+				while (true) {
+					await sleep(new Date(Math.min(Date.now() + interval * 1000, attempt.expiresAt)))
+					const result = await poll(attempt, idpOptions)
+					if (result.status === 'approved') {
+						await emit(toolCallId, 'data-approval-status', { status: 'verified' })
+						return result.result
+					}
+					if (result.status === 'slow_down') interval += 5
+					if (result.status === 'connection_error') interval *= 2
+					if (result.status === 'rejected' || result.status === 'expired') {
+						status = result.status
+						break
+					}
+				}
+			} else if (decision === 'reject') {
+				status = 'rejected'
+			}
+		} catch (error) {
+			await emit(toolCallId, 'data-approval-status', { status: 'error' })
+			throw error
+		}
+		await emit(toolCallId, 'data-approval-status', { status })
+		throw new FatalError(`Human approval ${status}. Start a new approval request if needed.`)
 	}
 }

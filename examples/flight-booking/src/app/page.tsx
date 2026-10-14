@@ -1,200 +1,160 @@
 'use client'
 
 import { useChat } from '@ai-sdk/react'
+import { isToolUIPart } from 'ai'
 import { useEffect, useRef } from 'react'
+import { ArrowUpRight, Plane } from 'lucide-react'
 import ChatInput from '@/components/chat-input'
-import { HumanApproval } from '@worldcoin/human-in-the-loop-react'
+import { BookingApproval } from '@/components/booking-approval'
 import type { MyUIMessage } from '@/schemas/chat'
+import { Button } from '@/components/ui/button'
 import { Shimmer } from '@/components/ai-elements/shimmer'
 import { Response } from '@/components/ai-elements/response'
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { Suggestion, Suggestions } from '@/components/ai-elements/suggestion'
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
+import { Tool, ToolContent, ToolHeader, ToolOutput } from '@/components/ai-elements/tool'
 import { Conversation, ConversationContent, ConversationScrollButton } from '@/components/ai-elements/conversation'
 
-const SUGGESTIONS = [
-	'Find me flights from San Francisco to Los Angeles',
-	"What's the status of flight UA123?",
-	'Tell me about SFO airport',
-	"What's the baggage allowance for United Airlines economy?",
-	'Book a flight from New York to Miami',
-]
+const TOOL_LABELS = {
+	'tool-searchFlights': 'Find flights',
+	'tool-checkFlightStatus': 'Check flight status',
+	'tool-getAirportInfo': 'Check airport details',
+	'tool-bookFlight': 'Book your flight',
+	'tool-checkBaggageAllowance': 'Check baggage allowance',
+}
 
 export default function ChatPage() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null)
-
-	const { stop, messages, sendMessage, status, setMessages } = useChat<MyUIMessage>({
-		onError(error) {
-			console.error('onError', error)
-		},
-		onFinish(data) {
-			console.log('onFinish', data)
-
-			// Update the chat history in `localStorage` to include the latest bot message
-			console.log('Saving chat history to localStorage', data.messages)
-			localStorage.setItem('chat-history', JSON.stringify(data.messages))
-
-			requestAnimationFrame(() => {
-				textareaRef.current?.focus()
-			})
+	const { stop, messages, sendMessage, status, setMessages, error } = useChat<MyUIMessage>({
+		onFinish({ messages }) {
+			localStorage.setItem('chat-history', JSON.stringify(messages))
+			requestAnimationFrame(() => textareaRef.current?.focus())
 		},
 	})
 
-	// Load chat history from `localStorage`. In a real-world application,
-	// this would likely be done on the server side and loaded from a database,
-	// but for the purposes of this demo, we'll load it from `localStorage`.
 	useEffect(() => {
 		const chatHistory = localStorage.getItem('chat-history')
-		if (!chatHistory) return
-		setMessages(JSON.parse(chatHistory) as MyUIMessage[])
+		if (chatHistory) setMessages(JSON.parse(chatHistory) as MyUIMessage[])
+		textareaRef.current?.focus()
 	}, [setMessages])
 
-	// Activate the input field
-	useEffect(() => {
-		textareaRef.current?.focus()
-	}, [])
-
 	return (
-		<div className="flex flex-col w-full max-w-2xl pt-12 pb-24 mx-auto stretch">
-			<div className="mb-8 text-center">
-				<h1 className="text-3xl font-bold mb-2">Flight Booking Agent</h1>
-				<p className="text-muted-foreground">AI-powered flight booking assistant</p>
-			</div>
+		<main className="isolate mx-auto flex h-dvh w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-4 sm:px-6 sm:pt-8">
+			<header className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 pb-6">
+				<div className="space-y-2">
+					<p className="text-base text-muted-foreground sm:text-sm">Human in the Loop / Flight booking</p>
+					<h1 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+						The agent finds it. You approve it.
+					</h1>
+					<p className="max-w-[56ch] text-base text-pretty text-muted-foreground sm:text-sm">
+						Plan a trip, review the details, and approve each booking with World ID.
+					</p>
+				</div>
+				<Plane aria-hidden="true" className="size-6 shrink-0 text-muted-foreground" />
+			</header>
 
 			{messages.length === 0 && (
-				<div className="mb-8 space-y-4">
-					<div className="text-center">
-						<h2 className="text-lg font-semibold mb-2">How can I help you today?</h2>
-						<p className="text-muted-foreground text-sm">
-							Try one of these suggestions or ask anything about flights
+				<section className="space-y-5 py-6">
+					<div className="space-y-2">
+						<h2 className="text-xl font-medium text-balance">Give it a try</h2>
+						<p className="text-base text-pretty text-muted-foreground sm:text-sm">
+							The agent will find a flight, then pause for your decision.
 						</p>
 					</div>
-					<Suggestions>
-						{SUGGESTIONS.map(suggestion => (
-							<Suggestion
-								key={suggestion}
-								suggestion={suggestion}
-								onClick={suggestion =>
-									sendMessage({
-										text: suggestion,
-										metadata: { createdAt: Date.now() },
-									})
-								}
-							/>
-						))}
-					</Suggestions>
-					<div className="mt-10 p-3 bg-muted/25 rounded-lg border">
-						<p className="text-sm text-muted-foreground mb-3">
-							To see the full extent of agentic tool-calling, use this prompt:
-						</p>
-						<button
-							type="button"
-							onClick={() => {
-								sendMessage({
-									text: 'Book me the cheapest flight from Lisbon to San Francisco for April 1st 2025. My name is Miguel Piedrafita. Get me a window seat if possible.',
-									metadata: { createdAt: Date.now() },
-								})
-							}}
-							className="text-sm border px-3 py-2 rounded-md bg-muted/50 text-left hover:bg-muted/75 transition-colors cursor-pointer"
-						>
-							Book me the cheapest flight from Lisbon to San Francisco for April 1st 2025. My name is
-							Miguel Piedrafita. Get me a window seat if possible.
-						</button>
-					</div>
-				</div>
+					<Button
+						type="button"
+						variant="outline"
+						className="h-auto w-full justify-between gap-4 whitespace-normal p-4 text-left text-base sm:text-sm"
+						onClick={() =>
+							sendMessage({
+								text: `Book the cheapest flight from Lisbon to San Francisco on ${new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)}. My name is Alex Morgan. I would like a window seat.`,
+								metadata: { createdAt: Date.now() },
+							})
+						}
+					>
+						<span>Book a flight from Lisbon to San Francisco</span>
+						<ArrowUpRight aria-hidden="true" className="size-4 shrink-0" />
+					</Button>
+					<p className="text-base text-muted-foreground sm:text-sm">
+						This is a demo. Flights and bookings are simulated.
+					</p>
+				</section>
 			)}
-			<Conversation className="mb-10">
-				<ConversationContent>
-					{messages.map((message, index) => {
-						const hasText = message.parts.some(part => part.type === 'text')
 
-						return (
-							<div key={message.id}>
-								{message.role === 'assistant' &&
-									index === messages.length - 1 &&
-									(status === 'submitted' || status === 'streaming') &&
-									!hasText && <Shimmer className="text-sm">Thinking...</Shimmer>}
-								<Message from={message.role}>
-									<MessageContent>
-										{message.parts.map((part, partIndex) => {
-											if (part.type === 'text') {
-												return (
-													<Response key={`${message.id}-text-${partIndex}`}>
-														{part.text}
-													</Response>
-												)
-											}
-
-											if (part.type === 'tool-bookingApproval' && 'toolCallId' in part) {
-												return (
-													<HumanApproval
-														key={part.toolCallId}
-														message={message}
-														part={part}
+			<Conversation className="min-h-0 w-full" aria-label="Flight booking conversation">
+				<ConversationContent className="p-0">
+					{messages.map((message, index) => (
+						<div key={message.id}>
+							{message.role === 'assistant' &&
+								index === messages.length - 1 &&
+								(status === 'submitted' || status === 'streaming') &&
+								!message.parts.some(part => part.type === 'text' || part.type.startsWith('tool-')) && (
+									<Shimmer className="text-base sm:text-sm">Finding the next step…</Shimmer>
+								)}
+							<Message from={message.role}>
+								<MessageContent
+									className={
+										message.role === 'assistant'
+											? 'w-full max-w-full gap-4 overflow-visible text-base sm:text-sm'
+											: 'max-w-[90%] text-base sm:max-w-[80%] sm:text-sm'
+									}
+								>
+									{message.parts.map((part, partIndex) => {
+										if (part.type === 'text')
+											return <Response key={partIndex}>{part.text}</Response>
+										if (part.type === 'tool-bookingApproval')
+											return (
+												<BookingApproval key={part.toolCallId} message={message} part={part} />
+											)
+										if (!isToolUIPart(part) || !(part.type in TOOL_LABELS)) return null
+										return (
+											<Tool
+												key={part.toolCallId}
+												defaultOpen={part.type === 'tool-bookFlight'}
+												className="mb-0"
+											>
+												<ToolHeader
+													title={TOOL_LABELS[part.type as keyof typeof TOOL_LABELS]}
+													type={part.type}
+													state={part.state}
+												/>
+												<ToolContent>
+													<ToolOutput
+														output={
+															part.state === 'output-available'
+																? renderToolOutput(part)
+																: undefined
+														}
+														errorText={part.errorText}
 													/>
-												)
-											}
-
-											if (
-												part.type === 'tool-searchFlights' ||
-												part.type === 'tool-checkFlightStatus' ||
-												part.type === 'tool-getAirportInfo' ||
-												part.type === 'tool-bookFlight' ||
-												part.type === 'tool-checkBaggageAllowance'
-											) {
-												if (!('toolCallId' in part) || !('state' in part)) {
-													return null
-												}
-												return (
-													<Tool
-														key={part.toolCallId}
-														className="hover:bg-secondary/25 transition-colors"
-													>
-														<ToolHeader type={part.type} state={part.state} />
-														<ToolContent>
-															{part.input ? (
-																<ToolInput input={part.input as any} />
-															) : null}
-															<ToolOutput
-																output={
-																	part.state === 'output-available'
-																		? renderToolOutput(part)
-																		: undefined
-																}
-																errorText={part.errorText}
-															/>
-														</ToolContent>
-													</Tool>
-												)
-											}
-											return null
-										})}
-									</MessageContent>
-								</Message>
-							</div>
-						)
-					})}
+												</ToolContent>
+											</Tool>
+										)
+									})}
+								</MessageContent>
+							</Message>
+						</div>
+					))}
 				</ConversationContent>
-				<ConversationScrollButton />
+				<ConversationScrollButton aria-label="Scroll to the latest message" />
 			</Conversation>
-
+			{error && (
+				<p role="alert" className="text-base text-red-300 sm:text-sm">
+					The agent could not continue. Please try again.
+				</p>
+			)}
 			<ChatInput
 				status={status}
 				textareaRef={textareaRef}
 				setMessages={setMessages}
 				sendMessage={message => {
-					sendMessage({
-						text: message.text || '',
-						metadata: message.metadata,
-					})
+					sendMessage({ text: message.text || '', metadata: message.metadata })
 				}}
 				stop={stop}
 			/>
-		</div>
+		</main>
 	)
 }
 
-// Helper function to render tool outputs with proper formatting
 function renderToolOutput(part: any) {
 	const output = part.output
 	if (!output) {
@@ -289,7 +249,7 @@ function renderToolOutput(part: any) {
 
 			return (
 				<div className="space-y-2">
-					<div className="text-sm font-medium">✅ Booking Confirmed!</div>
+					<div className="text-sm font-medium">Booking confirmed</div>
 					<div className="space-y-1 text-sm">
 						<div>
 							Confirmation #: <span className="font-mono font-medium">{booking.confirmationNumber}</span>

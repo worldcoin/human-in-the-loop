@@ -1,101 +1,73 @@
 'use client'
 
-import { memo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { UIMessage, UIMessagePart } from 'ai'
+import type { UIMessage } from 'ai'
 import { isToolUIPart } from 'ai'
-import { IDKitRequestWidget, orbLegacy } from '@worldcoin/idkit'
-import type { Preset } from '@worldcoin/idkit'
 import { useHumanApproval } from './use-human-approval'
 
-const NOOP = () => {}
-
 export interface HumanApprovalProps {
-	/** The full message containing this tool part — used to find the streamed approval context. */
+	/** The message that contains the server's approval context. */
 	message: UIMessage
-	/** The tool-call part to render an approval widget for. Must include `toolCallId`. */
-	part: UIMessagePart<any, any>
-	/**
-	 * World developer portal app ID. Defaults to `process.env.NEXT_PUBLIC_WORLD_APP_ID`.
-	 * Required if the env var isn't set.
-	 */
-	appId?: `app_${string}`
-	/** IDKit preset. Defaults to `orbLegacy()`. */
-	preset?: Preset
-	/** Whether to accept legacy (v3) World ID proofs as a fallback. Defaults to `false`. */
-	allowLegacyProofs?: boolean
-	/** Override the trigger button label. */
+	part: UIMessage['parts'][number]
 	triggerLabel?: ReactNode
-	/** Override the success-state content shown after the proof is verified. */
 	successContent?: ReactNode
-	/** className applied to the outer wrapper, for consumers who want to style. */
 	className?: string
 }
 
-/**
- * Default UI for a human-in-the-loop approval. Renders the tool input as a
- * summary, a "Verify with World ID" button, and the IDKit request widget
- * wired to the streamed approval context. For custom UI, use `useHumanApproval`
- * directly.
- */
-function HumanApprovalImpl({
+/** Show the stored action and open World ID device authorization. */
+export function HumanApproval({
 	message,
 	part,
-	appId,
-	preset = orbLegacy(),
-	allowLegacyProofs = false,
-	triggerLabel = 'Verify with World ID',
+	triggerLabel = 'Approve with World ID',
 	successContent,
 	className,
 }: HumanApprovalProps) {
-	const [open, setOpen] = useState(false)
-	const { ready, action, rpContext, state, verify } = useHumanApproval(message, part)
-
-	const isTool = isToolUIPart(part)
-	const summary =
-		isTool && (part.state === 'input-available' || part.state === 'output-available')
-			? (part.input as { summary?: string } | undefined)?.summary
-			: undefined
-	const hasOutput = isTool && part.state === 'output-available'
-
-	const resolvedAppId = appId ?? (process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}` | undefined)
-
-	if (hasOutput) {
+	const { ready, action, input, verificationUri, userCode, state, approve, reject } = useHumanApproval(message, part)
+	if (!isToolUIPart(part)) return null
+	if (state.status === 'verified')
 		return <div className={className}>{successContent ?? <p>Approved with World ID.</p>}</div>
-	}
-
-	if (!isTool) return null
-
 	return (
 		<div className={className}>
-			{summary && <p>{summary}</p>}
-
+			{action && <p>Action: {action}</p>}
+			{input !== undefined && (
+				<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(input, null, 2)}</pre>
+			)}
+			{userCode && state.status !== 'rejecting' && state.status !== 'rejected' && (
+				<p>
+					Check this code on World ID: <strong>{userCode}</strong>
+				</p>
+			)}
 			<button
 				type="button"
-				onClick={() => setOpen(true)}
-				disabled={!ready || !resolvedAppId || state.status === 'verifying'}
+				disabled={!ready}
+				onClick={() => {
+					if (verificationUri) window.open(verificationUri, '_blank', 'noopener,noreferrer')
+					void approve()
+				}}
 			>
-				{state.status === 'verifying' ? 'Verifying…' : triggerLabel}
+				{triggerLabel}
 			</button>
-
-			{state.status === 'error' && <p role="alert">{state.error.message}</p>}
-
-			{ready && resolvedAppId && rpContext && action && (
-				<IDKitRequestWidget
-					open={open}
-					onOpenChange={setOpen}
-					onSuccess={NOOP}
-					handleVerify={verify}
-					app_id={resolvedAppId}
-					action={action}
-					rp_context={rpContext}
-					action_description={summary}
-					preset={preset}
-					allow_legacy_proofs={allowLegacyProofs}
-				/>
+			<button
+				type="button"
+				disabled={!ready}
+				onClick={() => {
+					void reject()
+				}}
+			>
+				Reject
+			</button>
+			{state.status === 'verifying' && (
+				<p role="status">Complete approval in World ID. This request will update automatically.</p>
 			)}
+			{state.status === 'verifying' && verificationUri && (
+				<a href={verificationUri} target="_blank" rel="noopener noreferrer">
+					Open World ID again
+				</a>
+			)}
+			{state.status === 'rejecting' && <p role="status">Saving your rejection.</p>}
+			{state.status === 'rejected' && <p role="status">Approval rejected.</p>}
+			{state.status === 'expired' && <p role="status">Approval expired. Request a new approval.</p>}
+			{state.status === 'error' && <p role="alert">{state.error.message}</p>}
 		</div>
 	)
 }
-
-export const HumanApproval = memo(HumanApprovalImpl)

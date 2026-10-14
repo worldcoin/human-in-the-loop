@@ -37,13 +37,11 @@
 		"prepublishOnly": "bun run build"
 	},
 	"peerDependencies": {
-		"@worldcoin/idkit": ">=4.0.0",
-		"ai": ">=5.0.0",
+		"ai": "^5.0.0",
 		"react": ">=18.0.0"
 	},
 	"devDependencies": {
 		"@types/react": "^19.2.7",
-		"@worldcoin/idkit": "^4.0.9",
 		"ai": "^5.0.76",
 		"react": "^19.2.3",
 		"tsup": "^8.5.0",
